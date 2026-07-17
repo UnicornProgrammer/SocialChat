@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SocialChat</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- SCHERMATA DI ACCESSO (AUTH) -->
+    <div class="auth-container" id="auth-container">
+        <div class="auth-card">
+            <div class="auth-logo">
+                <h1>SocialChat</h1>
+                <p>Accedi al tuo account</p>
+            </div>
+            <form id="form-login" class="auth-form">
+                <div class="form-group">
+                    <label for="login-phone">Numero di Telefono</label>
+                    <input type="tel" id="login-phone" placeholder="Es. +39 333 1234567" required>
+                </div>
+                <div class="form-group">
+                    <label for="login-email">Email</label>
+                    <input type="email" id="login-email" placeholder="nome@esempio.it" required>
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Password</label>
+                    <input type="password" id="login-password" placeholder="Inserisci la password" required>
+                </div>
+                <button type="submit" class="auth-submit-btn">Accedi</button>
+                <div class="error-message hidden" id="error-message"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- CONTAINER PRINCIPALE APPLICAZIONE -->
+    <div class="app-container hidden" id="app-container">
+        
+        <!-- BARRA LATERALE -->
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <h2 class="sidebar-logo" id="sidebar-logo" title="Clicca per scollegarti">SocialChat</h2>
+                <nav class="sidebar-nav">
+                    <button class="nav-btn active" id="btn-nav-chats">💬 Chat</button>
+                    <button class="nav-btn" id="btn-nav-contacts">👥 Persone nuove</button>
+                    <button class="nav-btn" id="btn-nav-posts">📝 Post</button>
+                    <button class="nav-btn" id="btn-nav-community">🌐 Community</button>
+                </nav>
+            </div>
+
+            <!-- Profilo in basso -->
+            <div class="sidebar-footer">
+                <div class="user-profile-widget" id="user-profile-widget" title="Clicca per modificare il tuo profilo">
+                    <img src="https://i.pravatar.cc/150?img=0" alt="Mio Avatar" class="widget-avatar" id="widget-avatar">
+                    <div class="widget-info">
+                        <span class="widget-name" id="widget-name">Alessandro</span>
+                        <span class="widget-status">Online</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- RIQUADRO PRINCIPALE A DESTRA -->
+        <main class="main-content">
+            
+            <!-- SEZIONE CHAT -->
+            <div class="view-section" id="section-chats">
+                <div class="chats-layout">
+                    <div class="chats-sidebar">
+                        <div class="panel-header">
+                            <h3>Conversazioni</h3>
+                            <button class="btn-macro-blue" id="btn-open-create-modal">＋ Nuova Chat</button>
+                        </div>
+                        <div class="search-container" style="padding: 10px 16px; border-bottom: 1px solid var(--medium-gray);">
+                            <input type="text" id="search-chats" placeholder="Cerca chat..." style="width: 100%; padding: 8px 12px; border: 1px solid var(--medium-gray); border-radius: 8px; font-size: 13px; outline: none; background: var(--light-gray);">
+                        </div>
+                        <div class="chats-list" id="chats-list"></div>
+                    </div>
+                    <div class="chat-viewport">
+                        <div class="chat-header hidden" id="chat-header"></div>
+                        <div class="chat-messages" id="chat-messages">
+                            <div class="chat-placeholder" id="chat-placeholder">
+                                <div class="placeholder-icon">💬</div>
+                                <h3>Seleziona una chat</h3>
+                                <p>Scegli una conversazione dalla lista o creane una nuova per iniziare.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="message-input-area hidden" id="message-input-area">
+                            <div class="input-actions">
+                                <button class="btn-attach" id="btn-attach" title="Aggiungi allegato">📎</button>
+                                <div class="attach-menu hidden" id="attach-menu">
+                                    <button class="attach-option" id="attach-photo">📷 Foto</button>
+                                    <button class="attach-option" id="attach-file">📁 File</button>
+                                </div>
+                            </div>
+                            <div class="input-wrapper" id="input-wrapper">
+                                <div class="attachments-preview" id="attachments-preview"></div>
+                                <textarea placeholder="Scrivi un messaggio... o trascina qui un file" class="message-input" id="message-input" rows="1"></textarea>
+                            </div>
+                            <button class="btn-send" id="btn-send">📤</button>
+                            <input type="file" id="file-input" style="display: none;" multiple>
+                            <input type="file" id="photo-input" accept="image/*" style="display: none;" multiple>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SEZIONE CONTATTI (PERSONE NUOVE) -->
+            <div class="view-section hidden" id="section-contacts">
+                <div class="panel-container">
+                    <div class="panel-header">
+                        <h3>Persone della community di SocialChat</h3>
+                    </div>
+                    <div class="search-container" style="margin: 10px 0 16px 0;">
+                        <input type="text" id="search-contacts" placeholder="Cerca persone per nome o telefono..." style="width: 100%; padding: 10px 14px; border: 1px solid var(--medium-gray); border-radius: 8px; font-size: 14px; outline: none;">
+                    </div>
+                    <div class="contacts-grid" id="contacts-list-container"></div>
+                </div>
+            </div>
+
+            <!-- SEZIONE POST -->
+            <div class="view-section hidden" id="section-posts">
+                <div class="panel-container">
+                    <div class="panel-header">
+                        <h3>Bacheca Post</h3>
+                        <button class="btn-macro-blue" id="btn-open-create-post">＋ Crea Post</button>
+                    </div>
+                    <div class="search-container" style="margin: 10px 0 16px 0;">
+                        <input type="text" id="search-posts" placeholder="Cerca post per titolo, descrizione o autore..." style="width: 100%; padding: 10px 14px; border: 1px solid var(--medium-gray); border-radius: 8px; font-size: 14px; outline: none;">
+                    </div>
+                    <div class="posts-list" id="posts-list-container"></div>
+                </div>
+            </div>
+
+            <!-- SEZIONE COMMUNITY -->
+            <div class="view-section hidden" id="section-community">
+                <div class="panel-container" id="community-main-panel">
+                    <div class="panel-header">
+                        <h3>Community Esplora</h3>
+                        <button class="btn-macro-blue" id="btn-open-create-community">＋ Crea Community</button>
+                    </div>
+                    <div class="search-container" style="margin: 10px 0 16px 0;">
+                        <input type="text" id="search-communities" placeholder="Cerca community per nome o descrizione..." style="width: 100%; padding: 10px 14px; border: 1px solid var(--medium-gray); border-radius: 8px; font-size: 14px; outline: none;">
+                    </div>
+                    <div class="communities-list" id="communities-list-container"></div>
+                </div>
+                
+                <div class="panel-container hidden" id="community-chat-panel" style="height: 100%; display: flex; flex-direction: column; padding: 0;">
+                    <div class="chat-header" id="community-chat-header" style="height: 60px; background: #FFFFFF; border-bottom: 1px solid var(--medium-gray); display: flex; align-items: center; padding: 0 20px; gap: 12px; flex-shrink: 0;"></div>
+                    <div class="chat-messages" id="community-chat-messages" style="flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #F8F9FA;"></div>
+                    <div class="message-input-area" id="community-message-input-area" style="padding: 14px 20px; background: white; border-top: 1px solid var(--medium-gray); display: flex; align-items: flex-end; gap: 12px; flex-shrink: 0;">
+                        <div class="input-actions">
+                            <button class="btn-attach" id="btn-community-attach" title="Aggiungi allegato">📎</button>
+                            <div class="attach-menu hidden" id="community-attach-menu" style="bottom: 40px; left: 0; background: white; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border-radius: 8px; padding: 4px; display: flex; flex-direction: column; position: absolute; z-index: 10; width: 120px;">
+                                <button class="attach-option" id="community-attach-photo">📷 Foto</button>
+                                <button class="attach-option" id="community-attach-file">📁 File</button>
+                            </div>
+                        </div>
+                        <div class="input-wrapper" id="community-input-wrapper">
+                            <div class="attachments-preview" id="community-attachments-preview"></div>
+                            <textarea placeholder="Scrivi un messaggio nella community... o trascina un file" class="message-input" id="community-message-input" rows="1"></textarea>
+                        </div>
+                        <button class="btn-send" id="btn-community-send">📤</button>
+                        <input type="file" id="community-file-input" style="display: none;" multiple>
+                        <input type="file" id="community-photo-input" accept="image/*" style="display: none;" multiple>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL MODIFICA PROFILO -->
+    <div class="modal-overlay hidden" id="profile-modal">
+        <div class="modal-card">
+            <h3>Modifica Profilo Utente</h3>
+            <div class="profile-edit-avatar-container" id="profile-drop-zone">
+                <img src="" alt="Anteprima Avatar" id="profile-modal-preview">
+                <div class="avatar-overlay-text">Clicca o trascina qui l'immagine</div>
+                <input type="file" id="modal-profile-file" accept="image/*" style="display: none;">
+            </div>
+            <div class="form-group">
+                <label for="edit-username">Nome Utente</label>
+                <input type="text" id="edit-username" placeholder="Inserisci il tuo nome">
+            </div>
+            <div class="form-group">
+                <label for="edit-bio">Biografia</label>
+                <textarea id="edit-bio" rows="3" placeholder="Racconto qualcosa di te..."></textarea>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-secondary" id="btn-close-profile">Annulla</button>
+                <button class="btn-primary" id="btn-save-profile">Salva Modifiche</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL CREA CHAT -->
+    <div class="modal-overlay hidden" id="create-chat-modal">
+        <div class="modal-card">
+            <h3>Crea Nuova Chat</h3>
+            <div class="selection-users-list" id="selection-users-list"></div>
+            <div class="modal-actions">
+                <button class="btn-secondary" id="btn-close-create-chat">Annulla</button>
+                <button class="btn-primary" id="btn-confirm-create-chat">Avvia Chat</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL CREA POST -->
+    <div class="modal-overlay hidden" id="create-post-modal">
+        <div class="modal-card">
+            <h3>Crea Nuovo Post</h3>
+            <div class="form-group">
+                <label for="post-title">Titolo</label>
+                <input type="text" id="post-title" placeholder="Inserisci il titolo del post">
+            </div>
+            <div class="form-group">
+                <label for="post-description">Descrizione</label>
+                <textarea id="post-description" rows="3" placeholder="Scrivi una descrizione..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>Trascina un file o clicca sotto per allegarlo</label>
+                <div class="profile-edit-avatar-container" id="post-file-drop-zone" style="border-radius: 8px; width: 100%; height: 80px; display: flex; align-items: center; justify-content: center; border: 2px dashed var(--dark-gray);">
+                    <span id="post-file-preview-text" style="font-size: 13px; color: var(--dark-gray); text-align: center; padding: 10px;">Trascina un file o clicca qui</span>
+                    <input type="file" id="post-file-input" style="display: none;">
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-secondary" id="btn-close-create-post">Annulla</button>
+                <button class="btn-primary" id="btn-publish-post">Pubblica</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL CREA COMMUNITY -->
+    <div class="modal-overlay hidden" id="create-community-modal">
+        <div class="modal-card">
+            <h3>Crea Nuova Community</h3>
+            <div class="form-group">
+                <label for="community-title">Titolo Community</label>
+                <input type="text" id="community-title" placeholder="Inserisci il nome del gruppo">
+            </div>
+            <div class="form-group">
+                <label for="community-description">Descrizione</label>
+                <textarea id="community-description" rows="3" placeholder="Cosa si fa in questa community?"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Foto Profilo Community (Clicca o trascina qui)</label>
+                <div class="profile-edit-avatar-container" id="community-avatar-drop-zone">
+                    <img src="https://i.pravatar.cc/150?img=12" alt="Anteprima Community" id="community-modal-preview">
+                    <div class="avatar-overlay-text">Clicca o trascina qui</div>
+                    <input type="file" id="community-avatar-input" accept="image/*" style="display: none;">
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-secondary" id="btn-close-create-community">Annulla</button>
+                <button class="btn-primary" id="btn-publish-community">Crea Community</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
