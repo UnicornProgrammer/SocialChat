@@ -1,5 +1,5 @@
 // CONFIGURAZIONE MOCKAPI - Inserisci qui l'URL del tuo progetto MockAPI
-const MOCKAPI_BASE_URL = "https://660000000000000000000000.mockapi.io/api/v1"; 
+const MOCKAPI_BASE_URL = "https://6a5a87fdad8332e75f029048.mockapi.io"; 
 // Ipotizzando gli endpoint: /socialchat_data (per posts, chats, communities) e /database_utenti (per i login)
 
 const initialMockData = {
@@ -175,12 +175,12 @@ function initLoginHandler() {
 
         try {
             // Chiamata all'endpoint MockAPI degli utenti remoti
-            const risposta = await fetch(`${MOCKAPI_BASE_URL}/database_utenti`);
+            const risposta = await fetch(`${MOCKAPI_BASE_URL}/users`);
             if (!risposta.ok) throw new Error("Database MockAPI non accessibile.");
             
             const utentiAutorizzati = await risposta.json();
             const utenteTrovato = utentiAutorizzati.find(u => 
-                u.phone.trim() === phone &&
+                u.telefono.trim() === phone &&
                 u.email.trim().toLowerCase() === email.toLowerCase() &&
                 u.password === password
             );
@@ -201,12 +201,12 @@ function initLoginHandler() {
                 }
 
                 if (!userProfileLoaded) {
-                    mockData.user.phone = utenteTrovato.phone;
+                    mockData.user.phone = utenteTrovato.telefono;
                     mockData.user.email = utenteTrovato.email;
                     const localName = email.split('@')[0];
                     mockData.user.name = localName.charAt(0).toUpperCase() + localName.slice(1);
                     mockData.user.bio = 'Sviluppatore appassionato di tecnologia 💻';
-                    mockData.user.photo = 'https://i.pravatar.cc/150?img=0';
+                    mockData.user.photo = utenteTrovato.avatar || 'https://i.pravatar.cc/150?img=0';
                 }
                 
                 localStorage.setItem('socialchat_login_timestamp', Date.now().toString());
@@ -267,7 +267,7 @@ async function initializeFeedbackChat() {
     let feedbackChat = mockData.chats.find(c => c.id === 'feedback');
     if (!feedbackChat) {
         try {
-            const res = await fetch(`${MOCKAPI_BASE_URL}/database_utenti`);
+            const res = await fetch(`${MOCKAPI_BASE_URL}/users`);
             if (res.ok) {
                 const utenti = await res.json();
                 const userNames = utenti.map(u => u.email.split('@')[0]);
@@ -560,27 +560,27 @@ if (btnOpenCreateModal) {
         createChatModal.classList.remove('hidden');
 
         try {
-            const res = await fetch(`${MOCKAPI_BASE_URL}/database_utenti`);
+            const res = await fetch(`${MOCKAPI_BASE_URL}/users`);
             if (!res.ok) return;
             const utenti = await res.json();
 
             utenti.forEach(u => {
                 const username = u.email.split('@')[0];
-                if(u.phone === mockData.user.phone || u.email.toLowerCase() === mockData.user.email.toLowerCase()) return;
+                if(u.telefono === mockData.user.phone || u.email.toLowerCase() === mockData.user.email.toLowerCase()) return;
 
                 const row = document.createElement('div');
                 row.className = 'user-selection-row';
                 row.innerHTML = `
                     <span class="selection-circle"></span>
-                    <span class="selection-row-name">${username} (${u.phone})</span>
+                    <span class="selection-row-name">${username} (${u.telefono})</span>
                 `;
 
                 row.onclick = () => {
                     row.classList.toggle('selected');
                     if(row.classList.contains('selected')) {
-                        selectedUsersForChat.push({ name: username, phone: u.phone });
+                        selectedUsersForChat.push({ name: username, phone: u.telefono });
                     } else {
-                        selectedUsersForChat = selectedUsersForChat.filter(item => item.phone !== u.phone);
+                        selectedUsersForChat = selectedUsersForChat.filter(item => item.phone !== u.telefono);
                     }
                 };
                 selectionUsersList.appendChild(row);
@@ -632,12 +632,12 @@ async function renderContactsGrid() {
     const filterText = searchInput ? searchInput.value.toLowerCase().trim() : '';
 
     try {
-        const risposta = await fetch(`${MOCKAPI_BASE_URL}/database_utenti`);
+        const risposta = await fetch(`${MOCKAPI_BASE_URL}/users`);
         if (!risposta.ok) return;
         const utenti = await risposta.json();
 
         utenti.forEach((utente, idx) => {
-            const isSelf = (utente.phone === mockData.user.phone) || 
+            const isSelf = (utente.telefono === mockData.user.phone) || 
                            (utente.email.toLowerCase() === mockData.user.email.toLowerCase());
             
             if (isSelf) return;
@@ -645,9 +645,9 @@ async function renderContactsGrid() {
             const cleanName = utente.email.split('@')[0];
             const readableName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1).replace('.', ' ');
             const bioMockup = `Entusiasta di far parte della community di SocialChat ⚡`;
-            const avatarUrl = `https://i.pravatar.cc/150?img=${(idx + 10) % 70}`;
+            const avatarUrl = utente.avatar || `https://i.pravatar.cc/150?img=${(idx + 10) % 70}`;
 
-            if (filterText && !readableName.toLowerCase().includes(filterText) && !utente.phone.includes(filterText)) {
+            if (filterText && !readableName.toLowerCase().includes(filterText) && !utente.telefono.includes(filterText)) {
                 return;
             }
 
