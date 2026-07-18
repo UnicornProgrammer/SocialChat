@@ -1,3 +1,7 @@
+// CONFIGURAZIONE MOCKAPI - Inserisci qui l'URL del tuo progetto MockAPI
+const MOCKAPI_BASE_URL = "https://6a5a87fdad8332e75f029048.mockapi.io";
+// Ipotizzando gli endpoint: /socialchat_data (per posts, chats, communities) e /database_utenti (per i login)
+
 const initialMockData = {
     chats: [],
     contacts: [], 
@@ -25,6 +29,7 @@ const initialMockData = {
 };
 
 let mockData = initialMockData;
+let mockDataRecordId = null; // ID del record globale su MockAPI
 let activeChat = null;
 let activeCommunityChat = null;
 let selectedFiles = [];
@@ -83,12 +88,38 @@ function applyDataRetentionPolicy() {
 }
 
 async function loadDataFromMockAPI() {
-    // Usa solo localStorage
-    const savedData = localStorage.getItem('socialchat_data');
-    if (savedData) {
-        mockData = JSON.parse(savedData);
-    } else {
-        mockData = initialMockData;
+    try {
+        // Cerca un record speciale in /users per i dati dell'app
+        const res = await fetch(`${MOCKAPI_BASE_URL}/users`);
+        if (!res.ok) throw new Error("Impossibile leggere da MockAPI");
+        const users = await res.json();
+
+        // Cerca il record speciale con email 'socialchat_app_data'
+        const appDataRecord = users.find(u => u.email === 'socialchat_app_data');
+
+        if (appDataRecord) {
+            mockDataRecordId = appDataRecord.id;
+            mockData = appDataRecord.mockData || initialMockData;
+        } else {
+            // Crea il record speciale per i dati dell'app
+            const createRes = await fetch(`${MOCKAPI_BASE_URL}/users`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: 'SocialChat App Data',
+                    email: 'socialchat_app_data',
+                    phone: '',
+                    password: '',
+                    mockData: initialMockData
+                })
+            });
+            const created = await createRes.json();
+            mockDataRecordId = created.id;
+            mockData = created.mockData || initialMockData;
+        }
+    } catch (err) {
+        console.error("Errore MockAPI, fallback su localStorage:", err);
+        mockData = JSON.parse(localStorage.getItem('socialchat_data')) || initialMockData;
     }
 }
 
@@ -1383,4 +1414,22 @@ async function executeCommunityMessageTransmission() {
 
 async function saveData() {
     localStorage.setItem('socialchat_data', JSON.stringify(mockData));
+
+    if (mockDataRecordId) {
+        try {
+            await fetch(`${MOCKAPI_BASE_URL}/users/${mockDataRecordId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: 'SocialChat App Data',
+                    email: 'socialchat_app_data',
+                    phone: '',
+                    password: '',
+                    mockData: mockData
+                })
+            });
+        } catch (err) {
+            console.error("Errore nel salvataggio su MockAPI:", err);
+        }
+    }
 }
