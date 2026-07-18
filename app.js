@@ -596,6 +596,7 @@ function initProfileModalHandlers() {
                 mockData.user.photo = imgPreview.src;
             }
 
+            // Salva in localStorage immediatamente
             localStorage.setItem('socialchat_myprofile', JSON.stringify(mockData.user));
 
             if (mockData.user.email) {
@@ -603,10 +604,11 @@ function initProfileModalHandlers() {
                 localStorage.setItem(emailKey, JSON.stringify(mockData.user));
             }
 
+            // Aggiorna UI e chiudi modal immediatamente
             updateProfileWidgetDOM();
             modal.classList.add('hidden');
 
-            // Salva su MockAPI in background senza bloccare la UI
+            // Salva su MockAPI in background senza bloccare
             saveData();
         });
     }
