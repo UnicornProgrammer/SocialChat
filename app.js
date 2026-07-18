@@ -283,6 +283,15 @@ function initMobileMenu() {
         item.addEventListener('click', () => {
             const section = item.dataset.section;
 
+            // Se è il pulsante profilo
+            if (item.id === 'mobile-profile-btn') {
+                const profileWidget = document.getElementById('user-profile-widget');
+                if (profileWidget) {
+                    profileWidget.click();
+                }
+                return;
+            }
+
             // Aggiorna active state
             mobileNavItems.forEach(nav => nav.classList.remove('active'));
             item.classList.add('active');
