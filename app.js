@@ -620,14 +620,12 @@ function initProfileModalHandlers() {
                 localStorage.setItem(emailKey, JSON.stringify(mockData.user));
             }
 
-            // 3. Aggiorna subito il widget visibile
+            // 3. Aggiorna subito il widget visibile e chiudi la modale
             updateProfileWidgetDOM();
-
-            // 4. Esegui il salvataggio remoto e attendi il completamento locale primario
-            await saveData();
-
-            // 5. Chiudi la modale SOLO dopo che le operazioni grafiche e di salvataggio sono concluse
             modal.classList.add('hidden');
+
+            // 4. Salva su MockAPI in background (con retry): non blocca l'UI
+            saveData();
         });
     }
 }
@@ -1458,9 +1456,15 @@ function createTimeoutSignal(ms) {
 }
 
 async function saveData() {
-    // Salva sempre in localStorage (funziona offline)
+    // Salva sempre in localStorage (sincrono, funziona offline).
     localStorage.setItem('socialchat_data', JSON.stringify(mockData));
 
+    // Sincronizza con MockAPI in background: NON blocca l'UI.
+    // Così la modale/i messaggi si aggiornano subito anche se la rete è lenta.
+    syncMockDataToAPI();
+}
+
+async function syncMockDataToAPI() {
     if (mockDataRecordId) {
         // Retry logic per MockAPI (più robusto su mobile)
         let retries = 3;
