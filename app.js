@@ -579,7 +579,7 @@ function initProfileModalHandlers() {
     }
 
     if (btnSave) {
-        btnSave.addEventListener('click', async (e) => {
+        btnSave.addEventListener('click', (e) => {
             e.preventDefault();
             const editUsername = document.getElementById('edit-username');
             const editBio = document.getElementById('edit-bio');
@@ -604,11 +604,15 @@ function initProfileModalHandlers() {
                 localStorage.setItem(emailKey, JSON.stringify(mockData.user));
             }
 
-            // Aggiorna UI e chiudi modal immediatamente
-            updateProfileWidgetDOM();
+            // Chiudi modal immediatamente (fix iOS)
             modal.classList.add('hidden');
 
-            // Salva su MockAPI in background senza bloccare
+            // Aggiorna UI dopo chiusura
+            setTimeout(() => {
+                updateProfileWidgetDOM();
+            }, 50);
+
+            // Salva su MockAPI in background
             saveData();
         });
     }
