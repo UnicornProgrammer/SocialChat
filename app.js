@@ -455,13 +455,32 @@ function openChatConversation(chat) {
     viewportHeader.innerHTML = `
         <div class="chat-header-active" style="width:100%; display:flex; align-items:center; gap:12px;">
             <button id="btn-back-chat" style="background:none; border:none; color:var(--primary-color); font-size:24px; font-weight:bold; cursor:pointer; padding: 4px 8px; display:flex; align-items:center;">←</button>
-            <img src="${chat.avatar}" class="item-avatar" style="width:40px; height:40px;">
+            <div id="chat-avatar-edit" title="Clicca per cambiare la foto della chat" style="position:relative; cursor:pointer; width:40px; height:40px; flex-shrink:0;">
+                <img src="${chat.avatar}" class="item-avatar" style="width:40px; height:40px;">
+                <span style="position:absolute; bottom:-2px; right:-2px; background:var(--primary-color); color:#fff; width:16px; height:16px; border-radius:50%; font-size:9px; display:flex; align-items:center; justify-content:center; border:2px solid #fff;">📷</span>
+            </div>
+            <input type="file" id="chat-avatar-input" accept="image/*" style="display:none;">
             <div style="flex:1;">
                 <h4 style="font-weight:700; font-size:15px; margin:0;">${chat.name}</h4>
                 ${statusLabel}
             </div>
         </div>
     `;
+
+    const chatAvatarEdit = document.getElementById('chat-avatar-edit');
+    const chatAvatarInput = document.getElementById('chat-avatar-input');
+    if (chatAvatarEdit && chatAvatarInput) {
+        chatAvatarEdit.onclick = () => chatAvatarInput.click();
+        chatAvatarInput.onchange = async () => {
+            const file = chatAvatarInput.files && chatAvatarInput.files[0];
+            if (!file) return;
+            const dataUrl = await fileToBase64(file);
+            chat.avatar = dataUrl;
+            openChatConversation(chat);
+            renderChatsList();
+            saveData();
+        };
+    }
 
     document.getElementById('btn-back-chat').onclick = () => {
         activeChat = null;
@@ -732,7 +751,10 @@ async function renderContactsGrid() {
             const userPhone = utente.phone || utente.telefono || '';
             const isSelf = (userPhone === mockData.user.phone) || 
                            (utente.email.toLowerCase() === mockData.user.email.toLowerCase());
-            
+
+            // Il record tecnico usato per salvare i dati su MockAPI non è una persona
+            if (utente.email === 'socialchat_app_data') return;
+
             if (isSelf) return;
 
             const cleanName = utente.email.split('@')[0];
