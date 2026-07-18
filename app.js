@@ -180,7 +180,7 @@ function initLoginHandler() {
             
             const utentiAutorizzati = await risposta.json();
             const utenteTrovato = utentiAutorizzati.find(u => 
-                u.telefono.trim() === phone &&
+                u.phone.trim() === phone &&
                 u.email.trim().toLowerCase() === email.toLowerCase() &&
                 u.password === password
             );
