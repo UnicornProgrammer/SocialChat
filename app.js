@@ -529,7 +529,7 @@ function openChatConversation(chat) {
         chatAvatarInput.onchange = async () => {
             const file = chatAvatarInput.files && chatAvatarInput.files[0];
             if (!file) return;
-            const dataUrl = await resizeImageFile(file, 400, 0.85);
+            const dataUrl = await resizeImageFile(file, 256, 0.7);
             chat.avatar = dataUrl;
             openChatConversation(chat);
             renderChatsList();
@@ -707,7 +707,7 @@ function initProfileModalHandlers() {
 }
 
 function processAndPreviewProfileImg(file, targetImgElement) {
-    resizeImageFile(file, 400, 0.85)
+    resizeImageFile(file, 256, 0.7)
         .then((dataUrl) => { targetImgElement.src = dataUrl; })
         .catch((err) => console.error("Errore elaborazione immagine", err));
 }
@@ -968,7 +968,7 @@ async function executeMessageTransmission() {
     if(!msgText && selectedFiles.length === 0) return;
 
     const filePromises = selectedFiles.map(async (file) => {
-        const base64 = await resizeImageFile(file, 1280, 0.8);
+        const base64 = await resizeImageFile(file, 1024, 0.7);
         return { name: file.name, type: file.type, dataUrl: base64 };
     });
 
@@ -1496,7 +1496,7 @@ async function executeCommunityMessageTransmission() {
     if(!msgText && selectedCommunityFiles.length === 0) return;
 
     const filePromises = selectedCommunityFiles.map(async (file) => {
-        const base64 = await resizeImageFile(file, 1280, 0.8);
+        const base64 = await resizeImageFile(file, 1024, 0.7);
         return { name: file.name, type: file.type, dataUrl: base64 };
     });
 
@@ -1554,6 +1554,7 @@ async function syncMockDataToAPI() {
         // Retry logic per MockAPI (più robusto su mobile)
         let retries = 3;
         let success = false;
+        let payloadTooLarge = false;
 
         while (retries > 0 && !success) {
             try {
@@ -1575,6 +1576,12 @@ async function syncMockDataToAPI() {
                 if (response.ok) {
                     success = true;
                     console.log("Salvataggio MockAPI riuscito");
+                } else if (response.status === 413) {
+                    // Payload troppo grande: ritentare è inutile, il corpo è identico.
+                    // Succede con immagini troppo pesanti nel record condiviso.
+                    payloadTooLarge = true;
+                    console.error("MockAPI: payload troppo grande (413)");
+                    break;
                 } else {
                     retries--;
                     console.warn(`MockAPI retry (${retries} left) - status: ${response.status}`);
@@ -1592,7 +1599,13 @@ async function syncMockDataToAPI() {
         }
 
         if (!success) {
-            console.error("MockAPI salvataggio fallito dopo 3 tentativi");
+            console.error("MockAPI salvataggio fallito" + (payloadTooLarge ? " (413 payload troppo grande)" : " dopo 3 tentativi"));
+            // Avvisa l'utente solo quando l'immagine è troppo grande: è un problema
+            // su cui può agire (usare una foto più piccola) e senza avviso i dati
+            // sembrerebbero "dimenticati" al prossimo accesso.
+            if (payloadTooLarge && typeof alert === 'function') {
+                alert("L'immagine è troppo grande per essere salvata online e potrebbe non essere mantenuta al prossimo accesso. Prova a usare una foto più piccola/leggera.");
+            }
         }
     }
 }
