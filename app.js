@@ -566,21 +566,22 @@ if (btnOpenCreateModal) {
 
             utenti.forEach(u => {
                 const username = u.email.split('@')[0];
-                if(u.telefono === mockData.user.phone || u.email.toLowerCase() === mockData.user.email.toLowerCase()) return;
+                const userPhone = u.phone || u.telefono || '';
+                if(userPhone === mockData.user.phone || u.email.toLowerCase() === mockData.user.email.toLowerCase()) return;
 
                 const row = document.createElement('div');
                 row.className = 'user-selection-row';
                 row.innerHTML = `
                     <span class="selection-circle"></span>
-                    <span class="selection-row-name">${username} (${u.telefono})</span>
+                    <span class="selection-row-name">${username} (${userPhone})</span>
                 `;
 
                 row.onclick = () => {
                     row.classList.toggle('selected');
                     if(row.classList.contains('selected')) {
-                        selectedUsersForChat.push({ name: username, phone: u.telefono });
+                        selectedUsersForChat.push({ name: username, phone: userPhone });
                     } else {
-                        selectedUsersForChat = selectedUsersForChat.filter(item => item.phone !== u.telefono);
+                        selectedUsersForChat = selectedUsersForChat.filter(item => item.phone !== userPhone);
                     }
                 };
                 selectionUsersList.appendChild(row);
@@ -637,7 +638,8 @@ async function renderContactsGrid() {
         const utenti = await risposta.json();
 
         utenti.forEach((utente, idx) => {
-            const isSelf = (utente.telefono === mockData.user.phone) || 
+            const userPhone = utente.phone || utente.telefono || '';
+            const isSelf = (userPhone === mockData.user.phone) || 
                            (utente.email.toLowerCase() === mockData.user.email.toLowerCase());
             
             if (isSelf) return;
@@ -647,7 +649,7 @@ async function renderContactsGrid() {
             const bioMockup = `Entusiasta di far parte della community di SocialChat ⚡`;
             const avatarUrl = utente.avatar || `https://i.pravatar.cc/150?img=${(idx + 10) % 70}`;
 
-            if (filterText && !readableName.toLowerCase().includes(filterText) && !utente.telefono.includes(filterText)) {
+            if (filterText && !readableName.toLowerCase().includes(filterText) && !userPhone.includes(filterText)) {
                 return;
             }
 
