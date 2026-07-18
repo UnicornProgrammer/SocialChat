@@ -594,11 +594,42 @@ function initProfileModalHandlers() {
     }
 
     if (btnSave) {
-        btnSave.addEventListener('click', (e) => {
+        btnSave.addEventListener('click', async (e) => {
             e.preventDefault();
             const editUsername = document.getElementById('edit-username');
             const editBio = document.getElementById('edit-bio');
             const nuovoNome = editUsername ? editUsername.value.trim() : '';
+
+            if (!nuovoNome) {
+                alert("Il nome utente non può essere vuoto!");
+                return;
+            }
+
+            // 1. Aggiorna l'oggetto in memoria
+            mockData.user.name = nuovoNome;
+            mockData.user.bio = editBio ? editBio.value.trim() : '';
+            if (imgPreview && imgPreview.src) {
+                mockData.user.photo = imgPreview.src;
+            }
+
+            // 2. Salva in localStorage immediatamente per persistenza locale locale
+            localStorage.setItem('socialchat_myprofile', JSON.stringify(mockData.user));
+
+            if (mockData.user.email) {
+                const emailKey = `socialchat_profile_${mockData.user.email.toLowerCase()}`;
+                localStorage.setItem(emailKey, JSON.stringify(mockData.user));
+            }
+
+            // 3. Aggiorna subito il widget visibile
+            updateProfileWidgetDOM();
+
+            // 4. Esegui il salvataggio remoto e attendi il completamento locale primario
+            await saveData();
+
+            // 5. Chiudi la modale SOLO dopo che le operazioni grafiche e di salvataggio sono concluse
+            modal.classList.add('hidden');
+        });
+    }
 
             if (!nuovoNome) {
                 alert("Il nome utente non può essere vuoto!");
