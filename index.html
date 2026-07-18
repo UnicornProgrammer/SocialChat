@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SocialChat</title>
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -61,11 +61,25 @@
             </div>
         </aside>
 
-        <!-- MENU HAMBURGER MOBILE -->
-        <button class="mobile-menu-btn" id="mobile-menu-btn">☰</button>
-
-        <!-- OVERLAY SIDEBAR MOBILE -->
-        <div class="sidebar-overlay" id="sidebar-overlay"></div>
+        <!-- BOTTOM NAVIGATION BAR MOBILE -->
+        <nav class="mobile-bottom-nav" id="mobile-bottom-nav">
+            <button class="mobile-nav-item active" data-section="chats">
+                <span class="icon">💬</span>
+                <span>Chat</span>
+            </button>
+            <button class="mobile-nav-item" data-section="contacts">
+                <span class="icon">👥</span>
+                <span>Persone</span>
+            </button>
+            <button class="mobile-nav-item" data-section="posts">
+                <span class="icon">📝</span>
+                <span>Post</span>
+            </button>
+            <button class="mobile-nav-item" data-section="community">
+                <span class="icon">🌐</span>
+                <span>Community</span>
+            </button>
+        </nav>
 
         <!-- RIQUADRO PRINCIPALE A DESTRA -->
         <main class="main-content">

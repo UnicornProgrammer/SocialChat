@@ -1,7 +1,3 @@
-// CONFIGURAZIONE MOCKAPI - Inserisci qui l'URL del tuo progetto MockAPI
-const MOCKAPI_BASE_URL = "https://6a5a87fdad8332e75f029048.mockapi.io"; 
-// Ipotizzando gli endpoint: /socialchat_data (per posts, chats, communities) e /database_utenti (per i login)
-
 const initialMockData = {
     chats: [],
     contacts: [], 
@@ -29,7 +25,6 @@ const initialMockData = {
 };
 
 let mockData = initialMockData;
-let mockDataRecordId = null; // ID del record globale su MockAPI
 let activeChat = null;
 let activeCommunityChat = null;
 let selectedFiles = [];
@@ -88,28 +83,12 @@ function applyDataRetentionPolicy() {
 }
 
 async function loadDataFromMockAPI() {
-    try {
-        const res = await fetch(`${MOCKAPI_BASE_URL}/socialchat_data`);
-        if (!res.ok) throw new Error("Impossibile leggere da MockAPI");
-        const data = await res.json();
-        
-        if (data && data.length > 0) {
-            mockDataRecordId = data[0].id;
-            mockData = data[0].mockData;
-        } else {
-            // Se vuoto crea il primo record iniziale
-            const createRes = await fetch(`${MOCKAPI_BASE_URL}/socialchat_data`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mockData: initialMockData })
-            });
-            const created = await createRes.json();
-            mockDataRecordId = created.id;
-            mockData = created.mockData;
-        }
-    } catch (err) {
-        console.error("Errore MockAPI, fallback su localStorage:", err);
-        mockData = JSON.parse(localStorage.getItem('socialchat_data')) || initialMockData;
+    // Usa solo localStorage
+    const savedData = localStorage.getItem('socialchat_data');
+    if (savedData) {
+        mockData = JSON.parse(savedData);
+    } else {
+        mockData = initialMockData;
     }
 }
 
@@ -267,30 +246,38 @@ async function launchApp() {
 }
 
 function initMobileMenu() {
-    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
-    const sidebar = document.getElementById('sidebar');
-    const sidebarOverlay = document.getElementById('sidebar-overlay');
+    const mobileNavItems = document.querySelectorAll('.mobile-nav-item');
 
-    if (mobileMenuBtn && sidebar && sidebarOverlay) {
-        mobileMenuBtn.addEventListener('click', () => {
-            sidebar.classList.toggle('open');
-            sidebarOverlay.classList.toggle('active');
+    mobileNavItems.forEach(item => {
+        item.addEventListener('click', () => {
+            const section = item.dataset.section;
+
+            // Aggiorna active state
+            mobileNavItems.forEach(nav => nav.classList.remove('active'));
+            item.classList.add('active');
+
+            // Clicca sul corrispondente button della sidebar
+            const sidebarBtnId = `btn-nav-${section}`;
+            const sidebarBtn = document.getElementById(sidebarBtnId);
+            if (sidebarBtn) {
+                sidebarBtn.click();
+            }
         });
+    });
 
-        sidebarOverlay.addEventListener('click', () => {
-            sidebar.classList.remove('open');
-            sidebarOverlay.classList.remove('active');
-        });
-
-        // Chiudi sidebar quando si clicca su un nav button
-        const navButtons = document.querySelectorAll('.nav-btn');
-        navButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                sidebar.classList.remove('open');
-                sidebarOverlay.classList.remove('active');
+    // Sincronizza active state quando si usa la sidebar su desktop
+    const sidebarNavButtons = document.querySelectorAll('.nav-btn');
+    sidebarNavButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const sectionId = btn.id.replace('btn-nav-', '');
+            mobileNavItems.forEach(item => {
+                item.classList.remove('active');
+                if (item.dataset.section === sectionId) {
+                    item.classList.add('active');
+                }
             });
         });
-    }
+    });
 }
 
 async function initializeFeedbackChat() {
@@ -1396,16 +1383,4 @@ async function executeCommunityMessageTransmission() {
 
 async function saveData() {
     localStorage.setItem('socialchat_data', JSON.stringify(mockData));
-    
-    if (mockDataRecordId) {
-        try {
-            await fetch(`${MOCKAPI_BASE_URL}/socialchat_data/${mockDataRecordId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mockData: mockData })
-            });
-        } catch (err) {
-            console.error("Errore nel salvataggio su MockAPI:", err);
-        }
-    }
 }
