@@ -253,6 +253,12 @@ function initLoginHandler() {
             );
 
             if (utenteTrovato) {
+                // Ricarica i dati più recenti dal cloud PRIMA di salvare, così al
+                // re-login (anche da un altro dispositivo o dopo che iOS/Safari ha
+                // pulito localStorage) ritroviamo chat, contatti, community e profilo
+                // già salvati e non li sovrascriviamo con dati vuoti/iniziali.
+                await loadDataFromMockAPI();
+
                 const emailKey = `socialchat_profile_${email.toLowerCase()}`;
                 const savedProfileStr = localStorage.getItem(emailKey);
                 let userProfileLoaded = false;
@@ -267,6 +273,13 @@ function initLoginHandler() {
                     }
                 }
 
+                // Se non c'è in locale, usa il profilo già salvato sul cloud.
+                if (!userProfileLoaded && mockData.user && mockData.user.email &&
+                    mockData.user.email.toLowerCase() === email.toLowerCase()) {
+                    userProfileLoaded = true;
+                }
+
+                // Primo accesso in assoluto: imposta i valori iniziali.
                 if (!userProfileLoaded) {
                     mockData.user.phone = utenteTrovato.phone;
                     mockData.user.email = utenteTrovato.email;
