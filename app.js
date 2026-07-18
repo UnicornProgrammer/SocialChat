@@ -1430,23 +1430,51 @@ async function executeCommunityMessageTransmission() {
 }
 
 async function saveData() {
+    // Salva sempre in localStorage (funziona offline)
     localStorage.setItem('socialchat_data', JSON.stringify(mockData));
 
     if (mockDataRecordId) {
-        try {
-            await fetch(`${MOCKAPI_BASE_URL}/users/${mockDataRecordId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: 'SocialChat App Data',
-                    email: 'socialchat_app_data',
-                    phone: '',
-                    password: '',
-                    mockData: mockData
-                })
-            });
-        } catch (err) {
-            console.error("Errore nel salvataggio su MockAPI:", err);
+        // Retry logic per MockAPI (più robusto su mobile)
+        let retries = 3;
+        let success = false;
+
+        while (retries > 0 && !success) {
+            try {
+                const response = await fetch(`${MOCKAPI_BASE_URL}/users/${mockDataRecordId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: 'SocialChat App Data',
+                        email: 'socialchat_app_data',
+                        phone: '',
+                        password: '',
+                        mockData: mockData
+                    }),
+                    // Timeout di 10 secondi per evitare blocchi su mobile
+                    signal: AbortSignal.timeout(10000)
+                });
+
+                if (response.ok) {
+                    success = true;
+                    console.log("Salvataggio MockAPI riuscito");
+                } else {
+                    retries--;
+                    console.warn(`MockAPI retry (${retries} left) - status: ${response.status}`);
+                    if (retries > 0) {
+                        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s tra retry
+                    }
+                }
+            } catch (err) {
+                retries--;
+                console.warn(`MockAPI error retry (${retries} left):`, err.message);
+                if (retries > 0) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+        }
+
+        if (!success) {
+            console.error("MockAPI salvataggio fallito dopo 3 tentativi");
         }
     }
 }
