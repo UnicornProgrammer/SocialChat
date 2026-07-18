@@ -52,6 +52,48 @@ function fileToBase64(file) {
     });
 }
 
+// Ridimensiona e comprime un'immagine prima di salvarla come base64.
+// Le foto degli iPhone possono pesare diversi MB: senza compressione il JSON
+// salvato in localStorage supera la quota (~5MB su iOS) e blocca Safari.
+// I file non-immagine vengono restituiti invariati.
+function resizeImageFile(file, maxSize = 800, quality = 0.8) {
+    return new Promise((resolve, reject) => {
+        if (!file || !file.type || !file.type.startsWith('image/')) {
+            fileToBase64(file).then(resolve).catch(reject);
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                let width = img.width;
+                let height = img.height;
+                if (width >= height && width > maxSize) {
+                    height = Math.round(height * maxSize / width);
+                    width = maxSize;
+                } else if (height > width && height > maxSize) {
+                    width = Math.round(width * maxSize / height);
+                    height = maxSize;
+                }
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/jpeg', quality));
+                } catch (err) {
+                    resolve(e.target.result);
+                }
+            };
+            img.onerror = () => resolve(e.target.result);
+            img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
 function applyDataRetentionPolicy() {
     const now = Date.now();
     const fiftyDaysMs = 50 * 24 * 60 * 60 * 1000;
@@ -474,7 +516,7 @@ function openChatConversation(chat) {
         chatAvatarInput.onchange = async () => {
             const file = chatAvatarInput.files && chatAvatarInput.files[0];
             if (!file) return;
-            const dataUrl = await fileToBase64(file);
+            const dataUrl = await resizeImageFile(file, 400, 0.85);
             chat.avatar = dataUrl;
             openChatConversation(chat);
             renderChatsList();
@@ -652,9 +694,9 @@ function initProfileModalHandlers() {
 }
 
 function processAndPreviewProfileImg(file, targetImgElement) {
-    const reader = new FileReader();
-    reader.onload = (e) => { targetImgElement.src = e.target.result; };
-    reader.readAsDataURL(file);
+    resizeImageFile(file, 400, 0.85)
+        .then((dataUrl) => { targetImgElement.src = dataUrl; })
+        .catch((err) => console.error("Errore elaborazione immagine", err));
 }
 
 const btnOpenCreateModal = document.getElementById('btn-open-create-modal');
@@ -913,7 +955,7 @@ async function executeMessageTransmission() {
     if(!msgText && selectedFiles.length === 0) return;
 
     const filePromises = selectedFiles.map(async (file) => {
-        const base64 = await fileToBase64(file);
+        const base64 = await resizeImageFile(file, 1280, 0.8);
         return { name: file.name, type: file.type, dataUrl: base64 };
     });
 
@@ -1441,7 +1483,7 @@ async function executeCommunityMessageTransmission() {
     if(!msgText && selectedCommunityFiles.length === 0) return;
 
     const filePromises = selectedCommunityFiles.map(async (file) => {
-        const base64 = await fileToBase64(file);
+        const base64 = await resizeImageFile(file, 1280, 0.8);
         return { name: file.name, type: file.type, dataUrl: base64 };
     });
 
@@ -1480,9 +1522,21 @@ function createTimeoutSignal(ms) {
 }
 
 async function saveData() {
-    // Salva sempre in localStorage (funziona offline)
-    localStorage.setItem('socialchat_data', JSON.stringify(mockData));
+    // Salva subito in localStorage (sincrono, funziona offline).
+    try {
+        localStorage.setItem('socialchat_data', JSON.stringify(mockData));
+    } catch (err) {
+        // Es. QuotaExceededError su iOS: non deve bloccare/rompere l'app.
+        console.error("Errore salvataggio localStorage:", err && err.message);
+    }
 
+    // Sincronizza con MockAPI in background: NON blocca l'UI.
+    // Così la modale/i messaggi si aggiornano subito anche se la rete è lenta
+    // o assente (fondamentale su mobile/iPhone dove i retry congelavano l'app).
+    syncMockDataToAPI();
+}
+
+async function syncMockDataToAPI() {
     if (mockDataRecordId) {
         // Retry logic per MockAPI (più robusto su mobile)
         let retries = 3;
