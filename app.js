@@ -584,7 +584,7 @@ function initProfileModalHandlers() {
             const editUsername = document.getElementById('edit-username');
             const editBio = document.getElementById('edit-bio');
             const nuovoNome = editUsername ? editUsername.value.trim() : '';
-            
+
             if (!nuovoNome) {
                 alert("Il nome utente non può essere vuoto!");
                 return;
@@ -595,17 +595,19 @@ function initProfileModalHandlers() {
             if (imgPreview && imgPreview.src) {
                 mockData.user.photo = imgPreview.src;
             }
-            
+
             localStorage.setItem('socialchat_myprofile', JSON.stringify(mockData.user));
-            
+
             if (mockData.user.email) {
                 const emailKey = `socialchat_profile_${mockData.user.email.toLowerCase()}`;
                 localStorage.setItem(emailKey, JSON.stringify(mockData.user));
             }
 
-            await saveData();
             updateProfileWidgetDOM();
             modal.classList.add('hidden');
+
+            // Salva su MockAPI in background senza bloccare la UI
+            saveData();
         });
     }
 }
