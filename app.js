@@ -630,38 +630,6 @@ function initProfileModalHandlers() {
             modal.classList.add('hidden');
         });
     }
-
-            if (!nuovoNome) {
-                alert("Il nome utente non può essere vuoto!");
-                return;
-            }
-
-            mockData.user.name = nuovoNome;
-            mockData.user.bio = editBio ? editBio.value.trim() : '';
-            if (imgPreview && imgPreview.src) {
-                mockData.user.photo = imgPreview.src;
-            }
-
-            // Salva in localStorage immediatamente
-            localStorage.setItem('socialchat_myprofile', JSON.stringify(mockData.user));
-
-            if (mockData.user.email) {
-                const emailKey = `socialchat_profile_${mockData.user.email.toLowerCase()}`;
-                localStorage.setItem(emailKey, JSON.stringify(mockData.user));
-            }
-
-            // Chiudi modal immediatamente (fix iOS)
-            modal.classList.add('hidden');
-
-            // Aggiorna UI dopo chiusura
-            setTimeout(() => {
-                updateProfileWidgetDOM();
-            }, 50);
-
-            // Salva su MockAPI in background
-            saveData();
-        });
-    }
 }
 
 function processAndPreviewProfileImg(file, targetImgElement) {
@@ -1475,6 +1443,20 @@ async function executeCommunityMessageTransmission() {
     document.getElementById('community-attachments-preview').innerHTML = '';
 }
 
+// Crea un AbortSignal con timeout compatibile anche con vecchie versioni di
+// Safari/iOS dove AbortSignal.timeout() non è disponibile (< iOS 16).
+function createTimeoutSignal(ms) {
+    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+        return AbortSignal.timeout(ms);
+    }
+    if (typeof AbortController !== 'undefined') {
+        const controller = new AbortController();
+        setTimeout(() => controller.abort(), ms);
+        return controller.signal;
+    }
+    return undefined;
+}
+
 async function saveData() {
     // Salva sempre in localStorage (funziona offline)
     localStorage.setItem('socialchat_data', JSON.stringify(mockData));
@@ -1497,7 +1479,8 @@ async function saveData() {
                         mockData: mockData
                     }),
                     // Timeout di 10 secondi per evitare blocchi su mobile
-                    signal: AbortSignal.timeout(10000)
+                    // (fallback per iOS/Safari senza AbortSignal.timeout)
+                    signal: createTimeoutSignal(10000)
                 });
 
                 if (response.ok) {
