@@ -886,3 +886,177 @@ body {
     transform: scale(1.2);
     opacity: 0.8;
 }
+
+/* MENU HAMBURGER MOBILE */
+.mobile-menu-btn {
+    display: none;
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    z-index: 1000;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+}
+
+/* MEDIA QUERIES PER MOBILE */
+@media (max-width: 768px) {
+    /* Sidebar */
+    .sidebar {
+        position: fixed;
+        left: -100%;
+        top: 0;
+        height: 100vh;
+        width: 280px;
+        z-index: 999;
+        transition: left 0.3s ease;
+        box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
+    }
+
+    .sidebar.open {
+        left: 0;
+    }
+
+    .mobile-menu-btn {
+        display: block;
+    }
+
+    /* Overlay per sidebar mobile */
+    .sidebar-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 998;
+    }
+
+    .sidebar-overlay.active {
+        display: block;
+    }
+
+    /* Layout chat */
+    .chats-layout {
+        flex-direction: column;
+    }
+
+    .chats-sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--medium-gray);
+    }
+
+    .chat-viewport {
+        display: none;
+    }
+
+    .chat-viewport.active {
+        display: flex;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 500;
+    }
+
+    /* Griglie responsive */
+    .contacts-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .communities-list {
+        grid-template-columns: 1fr;
+    }
+
+    /* Modali */
+    .modal-card {
+        max-width: 90%;
+        margin: 20px;
+        padding: 20px;
+    }
+
+    /* Auth card */
+    .auth-card {
+        max-width: 90%;
+        margin: 20px;
+        padding: 24px;
+    }
+
+    /* Panel header */
+    .panel-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .panel-header h3 {
+        font-size: 16px;
+    }
+
+    .btn-macro-blue {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* Message bubbles */
+    .message-bubble {
+        max-width: 85%;
+    }
+
+    /* Input area */
+    .message-input-area {
+        padding: 12px 16px;
+    }
+
+    /* Chat header */
+    .chat-header {
+        padding: 0 16px;
+    }
+
+    /* Search inputs */
+    .search-container input {
+        font-size: 14px;
+    }
+}
+
+@media (max-width: 480px) {
+    /* Font sizes più piccoli per schermi molto piccoli */
+    .auth-logo h1 {
+        font-size: 24px;
+    }
+
+    .sidebar-logo {
+        font-size: 18px;
+    }
+
+    .nav-btn {
+        font-size: 14px;
+        padding: 10px 12px;
+    }
+
+    .panel-header h3 {
+        font-size: 15px;
+    }
+
+    .message-bubble {
+        max-width: 90%;
+        font-size: 13px;
+    }
+
+    .widget-name {
+        font-size: 13px;
+    }
+
+    /* Sidebar più stretta su schermi molto piccoli */
+    .sidebar {
+        width: 260px;
+    }
+}

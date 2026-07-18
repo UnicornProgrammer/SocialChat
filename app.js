@@ -257,10 +257,40 @@ async function launchApp() {
     const searchCommunitiesInput = document.getElementById('search-communities');
     if (searchCommunitiesInput) searchCommunitiesInput.addEventListener('input', renderCommunities);
 
+    // Mobile menu handlers
+    initMobileMenu();
+
     renderChatsList();
     renderContactsGrid();
     renderPosts();
     renderCommunities();
+}
+
+function initMobileMenu() {
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebar-overlay');
+
+    if (mobileMenuBtn && sidebar && sidebarOverlay) {
+        mobileMenuBtn.addEventListener('click', () => {
+            sidebar.classList.toggle('open');
+            sidebarOverlay.classList.toggle('active');
+        });
+
+        sidebarOverlay.addEventListener('click', () => {
+            sidebar.classList.remove('open');
+            sidebarOverlay.classList.remove('active');
+        });
+
+        // Chiudi sidebar quando si clicca su un nav button
+        const navButtons = document.querySelectorAll('.nav-btn');
+        navButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                sidebar.classList.remove('open');
+                sidebarOverlay.classList.remove('active');
+            });
+        });
+    }
 }
 
 async function initializeFeedbackChat() {
@@ -367,7 +397,13 @@ function openChatConversation(chat) {
     document.getElementById('message-input-area').classList.remove('hidden');
     const viewportHeader = document.getElementById('chat-header');
     viewportHeader.classList.remove('hidden');
-    
+
+    // Mobile: mostra chat viewport full screen
+    const chatViewport = document.querySelector('.chat-viewport');
+    if (chatViewport) {
+        chatViewport.classList.add('active');
+    }
+
     let statusLabel = `<span style="font-size:12px; color:#34C759;">Online</span>`;
     if (chat.isGroup) {
         const count = chat.participantCount || 3;
@@ -389,6 +425,12 @@ function openChatConversation(chat) {
         activeChat = null;
         document.getElementById('message-input-area').classList.add('hidden');
         document.getElementById('chat-header').classList.add('hidden');
+
+        // Mobile: nascondi chat viewport
+        if (chatViewport) {
+            chatViewport.classList.remove('active');
+        }
+
         document.getElementById('chat-messages').innerHTML = `
             <div class="chat-placeholder" id="chat-placeholder">
                 <div class="placeholder-icon">💬</div>
