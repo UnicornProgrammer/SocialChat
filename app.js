@@ -29,7 +29,17 @@ const initialMockData = {
 };
 
 let mockData = initialMockData;
-let mockDataRecordId = null; // ID del record globale su MockAPI
+let mockDataRecordId = null; // ID del record dati dell'account su MockAPI
+let mockDataRecordEmail = null; // email/chiave del record dati dell'account
+let currentAccountEmail = null; // email dell'account loggato (minuscolo)
+
+// I record "tecnici" che contengono i dati dell'app non sono persone reali:
+// quello vecchio condiviso e quelli per-account (socialchat_appdata_<email>).
+function isAppDataEmail(email) {
+    if (!email) return false;
+    const e = String(email).toLowerCase();
+    return e === 'socialchat_app_data' || e.startsWith('socialchat_appdata_');
+}
 let activeChat = null;
 let activeCommunityChat = null;
 let selectedFiles = [];
@@ -129,42 +139,63 @@ function applyDataRetentionPolicy() {
     saveData();
 }
 
-async function loadDataFromMockAPI() {
-    // Prima prova a caricare da localStorage (priorità ai dati locali)
-    const localData = localStorage.getItem('socialchat_data');
+async function loadDataFromMockAPI(accountEmail) {
+    currentAccountEmail = accountEmail ? accountEmail.toLowerCase() : null;
+    const cacheKey = currentAccountEmail ? `socialchat_data_${currentAccountEmail}` : 'socialchat_data';
+
+    // Prima carica la copia locale dell'account (priorità ai dati locali, offline).
+    const localData = localStorage.getItem(cacheKey);
     if (localData) {
         try {
             mockData = JSON.parse(localData);
             console.log("Dati caricati da localStorage");
         } catch (e) {
             console.error("Errore parsing localStorage:", e);
-            mockData = initialMockData;
+            mockData = JSON.parse(JSON.stringify(initialMockData));
         }
     } else {
-        mockData = initialMockData;
+        mockData = JSON.parse(JSON.stringify(initialMockData));
     }
 
-    // Poi prova a sincronizzare con MockAPI
+    // Senza account (avvio senza sessione) non c'è record cloud da caricare.
+    if (!currentAccountEmail) {
+        mockDataRecordId = null;
+        mockDataRecordEmail = null;
+        return;
+    }
+
+    // Poi sincronizza con MockAPI: ogni account ha il PROPRIO record, così lo stesso
+    // account vede gli stessi dati su telefono e computer e account diversi restano separati.
     try {
         const res = await fetch(`${MOCKAPI_BASE_URL}/users`);
         if (!res.ok) throw new Error("Impossibile leggere da MockAPI");
         const users = await res.json();
 
-        const appDataRecord = users.find(u => u.email === 'socialchat_app_data');
+        const recordEmail = `socialchat_appdata_${currentAccountEmail}`;
+        const accountRecord = users.find(u => u.email === recordEmail);
 
-        if (appDataRecord && appDataRecord.mockData) {
-            mockDataRecordId = appDataRecord.id;
-            // Sincronizza i dati: usa i dati locali come base, ma aggiorna da cloud se necessario
-            Object.assign(mockData, appDataRecord.mockData);
-            console.log("Dati sincronizzati con MockAPI");
+        if (accountRecord && accountRecord.mockData) {
+            mockDataRecordId = accountRecord.id;
+            mockDataRecordEmail = recordEmail;
+            Object.assign(mockData, accountRecord.mockData);
+            console.log("Dati account sincronizzati con MockAPI");
         } else {
-            // Crea il record speciale per i dati dell'app
+            // Primo accesso di questo account: crea il suo record.
+            // Migra i vecchi dati condivisi SOLO se erano di questo account.
+            let seed = JSON.parse(JSON.stringify(initialMockData));
+            const legacy = users.find(u => u.email === 'socialchat_app_data');
+            if (legacy && legacy.mockData && legacy.mockData.user &&
+                (legacy.mockData.user.email || '').toLowerCase() === currentAccountEmail) {
+                seed = legacy.mockData;
+            }
+            mockData = seed;
+
             const createRes = await fetch(`${MOCKAPI_BASE_URL}/users`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     name: 'SocialChat App Data',
-                    email: 'socialchat_app_data',
+                    email: recordEmail,
                     phone: '',
                     password: '',
                     mockData: mockData
@@ -172,7 +203,8 @@ async function loadDataFromMockAPI() {
             });
             const created = await createRes.json();
             mockDataRecordId = created.id;
-            console.log("Creato nuovo record MockAPI");
+            mockDataRecordEmail = recordEmail;
+            console.log("Creato record dati per l'account");
         }
     } catch (err) {
         console.error("Errore MockAPI, uso solo localStorage:", err);
@@ -181,8 +213,6 @@ async function loadDataFromMockAPI() {
 }
 
 async function checkSessionAndInit() {
-    await loadDataFromMockAPI();
-    
     const savedProfile = localStorage.getItem('socialchat_myprofile');
     const loginTimestamp = localStorage.getItem('socialchat_login_timestamp');
 
@@ -194,14 +224,29 @@ async function checkSessionAndInit() {
         if (elapsedMs > tenDaysMs) {
             logout();
             alert("Sessione scaduta dopo 10 giorni. Effettua nuovamente l'accesso.");
-        } else {
-            mockData.user = JSON.parse(savedProfile);
-            if (!mockData.posts) mockData.posts = initialMockData.posts;
-            if (!mockData.communities) mockData.communities = initialMockData.communities;
-            
-            applyDataRetentionPolicy();
-            showMainApplication();
+            return;
         }
+
+        let profile = null;
+        try { profile = JSON.parse(savedProfile); } catch (e) { profile = null; }
+        const accountEmail = profile && profile.email ? profile.email : null;
+
+        // Carica i dati DELL'ACCOUNT dal cloud (telefono e computer allineati).
+        await loadDataFromMockAPI(accountEmail);
+
+        // Il profilo sul cloud è la fonte di verità; usa il locale solo se il cloud
+        // non ha ancora un profilo per questo account.
+        const cloudUserOk = mockData.user && mockData.user.email && accountEmail &&
+            mockData.user.email.toLowerCase() === accountEmail.toLowerCase();
+        if (!cloudUserOk && profile) {
+            mockData.user = profile;
+        }
+
+        if (!mockData.posts) mockData.posts = initialMockData.posts;
+        if (!mockData.communities) mockData.communities = initialMockData.communities;
+
+        applyDataRetentionPolicy();
+        showMainApplication();
     } else {
         showAuthScreen();
     }
@@ -222,6 +267,10 @@ function showMainApplication() {
 function logout() {
     localStorage.removeItem('socialchat_myprofile');
     localStorage.removeItem('socialchat_login_timestamp');
+
+    mockDataRecordId = null;
+    mockDataRecordEmail = null;
+    currentAccountEmail = null;
 
     document.getElementById('login-phone').value = '';
     document.getElementById('login-email').value = '';
@@ -253,42 +302,43 @@ function initLoginHandler() {
             );
 
             if (utenteTrovato) {
-                // Ricarica i dati più recenti dal cloud PRIMA di salvare, così al
-                // re-login (anche da un altro dispositivo o dopo che iOS/Safari ha
-                // pulito localStorage) ritroviamo chat, contatti, community e profilo
-                // già salvati e non li sovrascriviamo con dati vuoti/iniziali.
-                await loadDataFromMockAPI();
+                // Carica/crea il record dati DELL'ACCOUNT dal cloud, così ritroviamo
+                // chat, contatti, community e profilo di QUESTO account (uguali su
+                // telefono e computer) e account diversi restano separati.
+                await loadDataFromMockAPI(email);
 
-                const emailKey = `socialchat_profile_${email.toLowerCase()}`;
-                const savedProfileStr = localStorage.getItem(emailKey);
-                let userProfileLoaded = false;
+                // Il profilo sul cloud è la fonte di verità. Se manca (primo accesso di
+                // questo account) usa il profilo locale per-email, altrimenti i default.
+                const cloudUserOk = mockData.user && mockData.user.email &&
+                    mockData.user.email.toLowerCase() === email.toLowerCase();
 
-                if (savedProfileStr) {
-                    try {
-                        const savedProfile = JSON.parse(savedProfileStr);
-                        mockData.user = savedProfile;
-                        userProfileLoaded = true;
-                    } catch (pErr) {
-                        console.error("Errore nel parsing del profilo salvato:", pErr);
+                if (!cloudUserOk) {
+                    const emailKey = `socialchat_profile_${email.toLowerCase()}`;
+                    const savedProfileStr = localStorage.getItem(emailKey);
+                    let userProfileLoaded = false;
+
+                    if (savedProfileStr) {
+                        try {
+                            mockData.user = JSON.parse(savedProfileStr);
+                            userProfileLoaded = true;
+                        } catch (pErr) {
+                            console.error("Errore nel parsing del profilo salvato:", pErr);
+                        }
+                    }
+
+                    // Primo accesso in assoluto: imposta i valori iniziali.
+                    if (!userProfileLoaded) {
+                        if (!mockData.user) mockData.user = {};
+                        if (!mockData.user.id) mockData.user.id = 'me';
+                        mockData.user.phone = utenteTrovato.phone;
+                        mockData.user.email = utenteTrovato.email;
+                        const localName = email.split('@')[0];
+                        mockData.user.name = localName.charAt(0).toUpperCase() + localName.slice(1);
+                        mockData.user.bio = 'Sviluppatore appassionato di tecnologia 💻';
+                        mockData.user.photo = utenteTrovato.avatar || 'https://i.pravatar.cc/150?img=0';
                     }
                 }
 
-                // Se non c'è in locale, usa il profilo già salvato sul cloud.
-                if (!userProfileLoaded && mockData.user && mockData.user.email &&
-                    mockData.user.email.toLowerCase() === email.toLowerCase()) {
-                    userProfileLoaded = true;
-                }
-
-                // Primo accesso in assoluto: imposta i valori iniziali.
-                if (!userProfileLoaded) {
-                    mockData.user.phone = utenteTrovato.phone;
-                    mockData.user.email = utenteTrovato.email;
-                    const localName = email.split('@')[0];
-                    mockData.user.name = localName.charAt(0).toUpperCase() + localName.slice(1);
-                    mockData.user.bio = 'Sviluppatore appassionato di tecnologia 💻';
-                    mockData.user.photo = utenteTrovato.avatar || 'https://i.pravatar.cc/150?img=0';
-                }
-                
                 localStorage.setItem('socialchat_login_timestamp', Date.now().toString());
                 localStorage.setItem('socialchat_myprofile', JSON.stringify(mockData.user));
                 localStorage.setItem(`socialchat_profile_${email.toLowerCase()}`, JSON.stringify(mockData.user));
@@ -397,7 +447,7 @@ async function initializeFeedbackChat() {
             const res = await fetch(`${MOCKAPI_BASE_URL}/users`);
             if (res.ok) {
                 const utenti = await res.json();
-                const userNames = utenti.map(u => u.email.split('@')[0]);
+                const userNames = utenti.filter(u => !isAppDataEmail(u.email)).map(u => u.email.split('@')[0]);
                 const totalParticipants = userNames.length + 1;
 
                 feedbackChat = {
@@ -730,6 +780,7 @@ if (btnOpenCreateModal) {
             const utenti = await res.json();
 
             utenti.forEach(u => {
+                if (isAppDataEmail(u.email)) return;
                 const username = u.email.split('@')[0];
                 const userPhone = u.phone || u.telefono || '';
                 if(userPhone === mockData.user.phone || u.email.toLowerCase() === mockData.user.email.toLowerCase()) return;
@@ -808,7 +859,7 @@ async function renderContactsGrid() {
                            (utente.email.toLowerCase() === mockData.user.email.toLowerCase());
 
             // Il record tecnico usato per salvare i dati su MockAPI non è una persona
-            if (utente.email === 'socialchat_app_data') return;
+            if (isAppDataEmail(utente.email)) return;
 
             if (isSelf) return;
 
@@ -1537,7 +1588,8 @@ function createTimeoutSignal(ms) {
 async function saveData() {
     // Salva subito in localStorage (sincrono, funziona offline).
     try {
-        localStorage.setItem('socialchat_data', JSON.stringify(mockData));
+        const cacheKey = currentAccountEmail ? `socialchat_data_${currentAccountEmail}` : 'socialchat_data';
+        localStorage.setItem(cacheKey, JSON.stringify(mockData));
     } catch (err) {
         // Es. QuotaExceededError su iOS: non deve bloccare/rompere l'app.
         console.error("Errore salvataggio localStorage:", err && err.message);
@@ -1563,7 +1615,7 @@ async function syncMockDataToAPI() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         name: 'SocialChat App Data',
-                        email: 'socialchat_app_data',
+                        email: mockDataRecordEmail || 'socialchat_app_data',
                         phone: '',
                         password: '',
                         mockData: mockData
