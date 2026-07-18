@@ -201,7 +201,7 @@ function initLoginHandler() {
                 }
 
                 if (!userProfileLoaded) {
-                    mockData.user.phone = utenteTrovato.telefono;
+                    mockData.user.phone = utenteTrovato.phone;
                     mockData.user.email = utenteTrovato.email;
                     const localName = email.split('@')[0];
                     mockData.user.name = localName.charAt(0).toUpperCase() + localName.slice(1);
