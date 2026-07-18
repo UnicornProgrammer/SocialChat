@@ -1,5 +1,8 @@
 // CONFIGURAZIONE MOCKAPI - Inserisci qui l'URL del tuo progetto MockAPI
 const MOCKAPI_BASE_URL = "https://6a5a87fdad8332e75f029048.mockapi.io";
+// Owner dell'app: eredita una-tantum i vecchi dati condivisi (record unico) sul
+// proprio account quando si passa ai dati separati per-account.
+const LEGACY_DATA_OWNER_EMAIL = "marta.giuliana.ag@gmail.com";
 // Ipotizzando gli endpoint: /socialchat_data (per posts, chats, communities) e /database_utenti (per i login)
 
 const initialMockData = {
@@ -181,11 +184,13 @@ async function loadDataFromMockAPI(accountEmail) {
             console.log("Dati account sincronizzati con MockAPI");
         } else {
             // Primo accesso di questo account: crea il suo record.
-            // Migra i vecchi dati condivisi SOLO se erano di questo account.
+            // Migrazione una-tantum: i vecchi dati condivisi (record unico) appartengono
+            // all'owner dell'app e vengono ereditati SOLO dal suo account; gli altri
+            // account partono dai dati iniziali. Non ci si può basare su
+            // legacy.mockData.user.email perché riflette l'ultimo che ha salvato.
             let seed = JSON.parse(JSON.stringify(initialMockData));
             const legacy = users.find(u => u.email === 'socialchat_app_data');
-            if (legacy && legacy.mockData && legacy.mockData.user &&
-                (legacy.mockData.user.email || '').toLowerCase() === currentAccountEmail) {
+            if (legacy && legacy.mockData && currentAccountEmail === LEGACY_DATA_OWNER_EMAIL) {
                 seed = legacy.mockData;
             }
             mockData = seed;
