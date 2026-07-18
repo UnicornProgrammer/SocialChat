@@ -88,18 +88,33 @@ function applyDataRetentionPolicy() {
 }
 
 async function loadDataFromMockAPI() {
+    // Prima prova a caricare da localStorage (priorità ai dati locali)
+    const localData = localStorage.getItem('socialchat_data');
+    if (localData) {
+        try {
+            mockData = JSON.parse(localData);
+            console.log("Dati caricati da localStorage");
+        } catch (e) {
+            console.error("Errore parsing localStorage:", e);
+            mockData = initialMockData;
+        }
+    } else {
+        mockData = initialMockData;
+    }
+
+    // Poi prova a sincronizzare con MockAPI
     try {
-        // Cerca un record speciale in /users per i dati dell'app
         const res = await fetch(`${MOCKAPI_BASE_URL}/users`);
         if (!res.ok) throw new Error("Impossibile leggere da MockAPI");
         const users = await res.json();
 
-        // Cerca il record speciale con email 'socialchat_app_data'
         const appDataRecord = users.find(u => u.email === 'socialchat_app_data');
 
-        if (appDataRecord) {
+        if (appDataRecord && appDataRecord.mockData) {
             mockDataRecordId = appDataRecord.id;
-            mockData = appDataRecord.mockData || initialMockData;
+            // Sincronizza i dati: usa i dati locali come base, ma aggiorna da cloud se necessario
+            Object.assign(mockData, appDataRecord.mockData);
+            console.log("Dati sincronizzati con MockAPI");
         } else {
             // Crea il record speciale per i dati dell'app
             const createRes = await fetch(`${MOCKAPI_BASE_URL}/users`, {
@@ -110,16 +125,16 @@ async function loadDataFromMockAPI() {
                     email: 'socialchat_app_data',
                     phone: '',
                     password: '',
-                    mockData: initialMockData
+                    mockData: mockData
                 })
             });
             const created = await createRes.json();
             mockDataRecordId = created.id;
-            mockData = created.mockData || initialMockData;
+            console.log("Creato nuovo record MockAPI");
         }
     } catch (err) {
-        console.error("Errore MockAPI, fallback su localStorage:", err);
-        mockData = JSON.parse(localStorage.getItem('socialchat_data')) || initialMockData;
+        console.error("Errore MockAPI, uso solo localStorage:", err);
+        // I dati locali sono già caricati, non fare nulla
     }
 }
 
