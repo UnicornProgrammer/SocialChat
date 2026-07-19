@@ -77,34 +77,39 @@ function buildChatId(phonesArray) {
 // il chiamante creava un SECONDO record duplicato per la stessa chat. Da quel
 // momento i due account leggevano record diversi e i messaggi sembravano
 // sparire per sempre: è il bug più probabile dietro "il messaggio non arriva".
+function chooseCanonicalSharedChatRecord(records) {
+    if (!records || records.length === 0) return null;
+
+    // Tutti i client devono scegliere ESATTAMENTE lo stesso record quando, per
+    // vecchi bug o retry, esistono duplicati con la stessa email logica.
+    // Priorità: messaggio più recente, poi maggior numero di messaggi, poi ID.
+    return records.slice().sort((a, b) => {
+        const aMessages = (a.chatData && a.chatData.messages) || [];
+        const bMessages = (b.chatData && b.chatData.messages) || [];
+        const aLast = aMessages.length ? Number(aMessages[aMessages.length - 1].dateTimestamp || 0) : 0;
+        const bLast = bMessages.length ? Number(bMessages[bMessages.length - 1].dateTimestamp || 0) : 0;
+        if (bLast !== aLast) return bLast - aLast;
+        if (bMessages.length !== aMessages.length) return bMessages.length - aMessages.length;
+        return String(b.id || '').localeCompare(String(a.id || ''), undefined, { numeric: true });
+    })[0];
+}
+
 async function fetchSharedChatRecord(chatId, existingRecordId = null, attempts = 3) {
-    // Se abbiamo l'ID del record salvato localmente, usiamo il lookup diretto per ID
-    if (existingRecordId) {
-        for (let i = 0; i < attempts; i++) {
-            try {
-                const res = await fetch(`${MOCKAPI_BASE_URL}/users/${existingRecordId}`, { signal: createTimeoutSignal(10000) });
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const record = await res.json();
-                return { ok: true, record: record };
-            } catch (err) {
-                console.error(`Errore lettura chat condivisa per ID (tentativo ${i + 1}/${attempts})`, err);
-                if (i < attempts - 1) await new Promise(r => setTimeout(r, 800 * (i + 1)));
-            }
-        }
-        return { ok: false, record: null };
-    }
-    
-    // Fallback: cerca per email
     const recordEmail = `socialchat_chat_${chatId}`;
+
+    // Non fidarsi ciecamente dell'ID locale: potrebbe riferirsi a un duplicato
+    // storico. Interroghiamo l'elenco e scegliamo sempre il record canonico con
+    // la stessa regola usata dalla sincronizzazione del destinatario.
     for (let i = 0; i < attempts; i++) {
         try {
             const res = await fetch(`${MOCKAPI_BASE_URL}/users`, { signal: createTimeoutSignal(10000) });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const users = await res.json();
-            const found = users.find(u => u.email === recordEmail) || null;
-            return { ok: true, record: found };
+            const matches = users.filter(u => u.email === recordEmail && u.chatData);
+            const canonical = chooseCanonicalSharedChatRecord(matches);
+            return { ok: true, record: canonical };
         } catch (err) {
-            console.error(`Errore lettura chat condivisa per email (tentativo ${i + 1}/${attempts})`, err);
+            console.error(`Errore lettura chat condivisa (tentativo ${i + 1}/${attempts})`, err);
             if (i < attempts - 1) await new Promise(r => setTimeout(r, 800 * (i + 1)));
         }
     }
@@ -131,7 +136,7 @@ async function saveSharedChatRecord(chatId, chatData, existingRecordId) {
             });
             console.log("PUT response status:", res.status);
             if (!res.ok) {
-                console.error("PUT request fallito:", res.status);
+                throw new Error(`PUT chat fallito: HTTP ${res.status}`);
             }
             return existingRecordId;
         } else {
@@ -142,6 +147,9 @@ async function saveSharedChatRecord(chatId, chatData, existingRecordId) {
                 body: JSON.stringify(payload),
                 signal: createTimeoutSignal(10000)
             });
+            if (!res.ok) {
+                throw new Error(`POST chat fallito: HTTP ${res.status}`);
+            }
             const created = await res.json();
             console.log("POST response - created id:", created.id);
             return created.id;
@@ -203,7 +211,8 @@ async function syncChatsFromServer() {
     const chatRecordsByEmail = {};
     allRecords.forEach(u => {
         if (typeof u.email === 'string' && u.email.startsWith('socialchat_chat_') && u.chatData) {
-            chatRecordsByEmail[u.email] = u;
+            const current = chatRecordsByEmail[u.email];
+            chatRecordsByEmail[u.email] = chooseCanonicalSharedChatRecord(current ? [current, u] : [u]);
         }
     });
     console.log("syncChatsFromServer - chat records found:", Object.keys(chatRecordsByEmail).length);
