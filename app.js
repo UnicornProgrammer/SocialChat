@@ -187,11 +187,13 @@ function countUnreadMessages(chat) {
 // Ricontrolla periodicamente (polling) i record condivisi delle chat dell'utente,
 // per "ricevere" i messaggi scritti nel frattempo da altri account.
 async function syncChatsFromServer() {
+    console.log("syncChatsFromServer - user:", mockData.user.name, "phone:", mockData.user.phone);
     let allRecords;
     try {
         const res = await fetch(`${MOCKAPI_BASE_URL}/users`);
         if (!res.ok) return;
         allRecords = await res.json();
+        console.log("syncChatsFromServer - total records:", allRecords.length);
     } catch (err) {
         console.error("Errore sync chat", err);
         return;
@@ -204,6 +206,7 @@ async function syncChatsFromServer() {
             chatRecordsByEmail[u.email] = u;
         }
     });
+    console.log("syncChatsFromServer - chat records found:", Object.keys(chatRecordsByEmail).length);
 
     let changed = false;
 
