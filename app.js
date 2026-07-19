@@ -644,6 +644,17 @@ function initLoginHandler() {
 async function migrateLegacyChats() {
     if (!mockData.chats) return;
     
+    // Carica il database utenti per cercare i numeri di telefono
+    let usersDB = [];
+    try {
+        const res = await fetch(`${MOCKAPI_BASE_URL}/users`);
+        if (res.ok) {
+            usersDB = await res.json();
+        }
+    } catch (err) {
+        console.error("Errore caricamento database utenti", err);
+    }
+    
     let migrated = 0;
     for (const chat of mockData.chats) {
         // Skip se è una chat di sistema
@@ -661,19 +672,37 @@ async function migrateLegacyChats() {
             migrated++;
         }
         
-        // Se non ha participantPhones, deducili dai messaggi
-        if (!chat.participantPhones || chat.participantPhones.length === 0) {
+        // Se non ha participantPhones o ne ha solo uno (solo l'utente corrente), deducili
+        if (!chat.participantPhones || chat.participantPhones.length <= 1) {
+            const uniquePhones = new Set();
+            
+            // Prima deduci dai messaggi
             if (chat.messages && chat.messages.length > 0) {
-                const uniquePhones = new Set();
                 chat.messages.forEach(m => {
                     if (m.authorPhone) uniquePhones.add(normalizePhone(m.authorPhone));
                 });
-                // Aggiungi sempre il telefono dell'utente corrente
-                uniquePhones.add(normalizePhone(mockData.user.phone));
-                chat.participantPhones = Array.from(uniquePhones);
-                console.log(`Deduced participantPhones for chat ${chat.chatId}:`, chat.participantPhones);
-                migrated++;
             }
+            
+            // Se è una chat 1-a-1 e non abbiamo trovato altri partecipanti, cerca nel database
+            if (!chat.isGroup && uniquePhones.size <= 1) {
+                const chatNameLower = chat.name.toLowerCase();
+                const otherUser = usersDB.find(u => 
+                    !isAppDataEmail(u.email) && 
+                    u.email.toLowerCase().startsWith(chatNameLower) &&
+                    u.phone && 
+                    normalizePhone(u.phone) !== normalizePhone(mockData.user.phone)
+                );
+                if (otherUser && otherUser.phone) {
+                    uniquePhones.add(normalizePhone(otherUser.phone));
+                    console.log(`Found participant from database: ${otherUser.email} -> ${otherUser.phone}`);
+                }
+            }
+            
+            // Aggiungi sempre il telefono dell'utente corrente
+            uniquePhones.add(normalizePhone(mockData.user.phone));
+            chat.participantPhones = Array.from(uniquePhones);
+            console.log(`Deduced participantPhones for chat ${chat.chatId}:`, chat.participantPhones);
+            migrated++;
         }
     }
     
