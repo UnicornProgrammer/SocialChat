@@ -102,16 +102,23 @@ async function saveSharedChatRecord(chatId, chatData, existingRecordId) {
         password: '',
         chatData: chatData
     };
+    console.log("saveSharedChatRecord chiamato - chatId:", chatId, "existingRecordId:", existingRecordId, "messaggi:", chatData.messages?.length);
     try {
         if (existingRecordId) {
+            console.log("PUT request a MockAPI per aggiornare record:", existingRecordId);
             const res = await fetch(`${MOCKAPI_BASE_URL}/users/${existingRecordId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
                 signal: createTimeoutSignal(10000)
             });
+            console.log("PUT response status:", res.status);
+            if (!res.ok) {
+                console.error("PUT request fallito:", res.status);
+            }
             return existingRecordId;
         } else {
+            console.log("POST request a MockAPI per creare nuovo record");
             const res = await fetch(`${MOCKAPI_BASE_URL}/users`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -119,6 +126,7 @@ async function saveSharedChatRecord(chatId, chatData, existingRecordId) {
                 signal: createTimeoutSignal(10000)
             });
             const created = await res.json();
+            console.log("POST response - created id:", created.id);
             return created.id;
         }
     } catch (err) {
