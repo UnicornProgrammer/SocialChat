@@ -646,48 +646,39 @@ async function migrateLegacyChats() {
     
     let migrated = 0;
     for (const chat of mockData.chats) {
-        // Skip se ha già un chatId o è una chat di sistema
-        if (chat.chatId || chat.isSystem) continue;
+        // Skip se è una chat di sistema
+        if (chat.isSystem) continue;
         
-        // Per chat 1-a-1, prova a dedurre il partecipante dal nome
-        if (!chat.isGroup && chat.participantPhones && chat.participantPhones.length > 0) {
-            // Ha già i participantPhones, usa quelli
-            chat.chatId = buildChatId([mockData.user.phone, ...chat.participantPhones.filter(p => normalizePhone(p) !== normalizePhone(mockData.user.phone))]);
-        } else if (!chat.isGroup) {
-            // Chat 1-a-1 senza participantPhones: usa l'ID esistente come chatId
-            chat.chatId = chat.id;
-            
-            // Deduce i partecipanti dai messaggi esistenti
-            if (chat.messages && chat.messages.length > 0) {
-                const uniquePhones = new Set();
-                chat.messages.forEach(m => {
-                    if (m.authorPhone) uniquePhones.add(normalizePhone(m.authorPhone));
-                });
-                // Aggiungi sempre il telefono dell'utente corrente
-                uniquePhones.add(normalizePhone(mockData.user.phone));
-                chat.participantPhones = Array.from(uniquePhones);
+        // Se non ha chatId, assegnalo
+        if (!chat.chatId) {
+            if (!chat.isGroup && chat.participantPhones && chat.participantPhones.length > 0) {
+                // Ha già i participantPhones, usa quelli
+                chat.chatId = buildChatId([mockData.user.phone, ...chat.participantPhones.filter(p => normalizePhone(p) !== normalizePhone(mockData.user.phone))]);
+            } else {
+                // Usa l'ID esistente come chatId
+                chat.chatId = chat.id;
             }
-        } else {
-            // Gruppo: usa l'ID esistente come chatId
-            chat.chatId = chat.id;
-            
-            // Deduce i partecipanti dai messaggi esistenti
-            if (chat.messages && chat.messages.length > 0) {
-                const uniquePhones = new Set();
-                chat.messages.forEach(m => {
-                    if (m.authorPhone) uniquePhones.add(normalizePhone(m.authorPhone));
-                });
-                // Aggiungi sempre il telefono dell'utente corrente
-                uniquePhones.add(normalizePhone(mockData.user.phone));
-                chat.participantPhones = Array.from(uniquePhones);
-            }
+            migrated++;
         }
         
-        migrated++;
+        // Se non ha participantPhones, deducili dai messaggi
+        if (!chat.participantPhones || chat.participantPhones.length === 0) {
+            if (chat.messages && chat.messages.length > 0) {
+                const uniquePhones = new Set();
+                chat.messages.forEach(m => {
+                    if (m.authorPhone) uniquePhones.add(normalizePhone(m.authorPhone));
+                });
+                // Aggiungi sempre il telefono dell'utente corrente
+                uniquePhones.add(normalizePhone(mockData.user.phone));
+                chat.participantPhones = Array.from(uniquePhones);
+                console.log(`Deduced participantPhones for chat ${chat.chatId}:`, chat.participantPhones);
+                migrated++;
+            }
+        }
     }
     
     if (migrated > 0) {
-        console.log(`Migrate ${migrated} legacy chats to use chatId`);
+        console.log(`Migrate ${migrated} legacy chats`);
         await saveData();
     }
 }
