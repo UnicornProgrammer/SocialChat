@@ -41,7 +41,239 @@ let currentAccountEmail = null; // email dell'account loggato (minuscolo)
 function isAppDataEmail(email) {
     if (!email) return false;
     const e = String(email).toLowerCase();
-    return e === 'socialchat_app_data' || e.startsWith('socialchat_appdata_');
+    return e === 'socialchat_app_data' || e.startsWith('socialchat_appdata_') || e.startsWith('socialchat_chat_');
+}
+
+// ============================================================
+// SISTEMA CHAT CONDIVISE TRA ACCOUNT
+// ------------------------------------------------------------
+// Prima ogni account salvava i "chats" solo nel proprio record
+// personale su MockAPI: se Lilly scriveva a Jane, il messaggio
+// restava chiuso nel record di Lilly e Jane non lo vedeva mai
+// (sembrava che Lilly avesse scritto "a se stessa"). Ora ogni
+// conversazione ha un ID deterministico basato sui numeri di
+// telefono dei partecipanti, ed è salvata in UN SOLO record
+// condiviso su MockAPI (stesso trucco già usato per i "dati app":
+// riusiamo l'endpoint /users come contenitore). Entrambi gli
+// account leggono e scrivono lo STESSO record.
+// ============================================================
+
+function normalizePhone(phone) {
+    return (phone || '').toString().replace(/\s+/g, '').trim();
+}
+
+// ID stabile e uguale per tutti i partecipanti, indipendentemente
+// da chi lo calcola o in che ordine sono stati selezionati i contatti.
+function buildChatId(phonesArray) {
+    const clean = (phonesArray || []).map(normalizePhone).filter(Boolean);
+    const unique = Array.from(new Set(clean)).sort();
+    return 'chat_' + unique.join('_').replace(/[^a-zA-Z0-9_]/g, '');
+}
+
+// Restituisce {ok, record}. "ok" distingue "ho controllato e non c'è nulla"
+// (ok=true, record=null) da "non sono riuscito a controllare" (ok=false, per
+// errore di rete/timeout). Questa distinzione è FONDAMENTALE: prima, un
+// semplice intoppo di rete veniva scambiato per "la chat non esiste ancora" e
+// il chiamante creava un SECONDO record duplicato per la stessa chat. Da quel
+// momento i due account leggevano record diversi e i messaggi sembravano
+// sparire per sempre: è il bug più probabile dietro "il messaggio non arriva".
+async function fetchSharedChatRecord(chatId, attempts = 3) {
+    const recordEmail = `socialchat_chat_${chatId}`;
+    for (let i = 0; i < attempts; i++) {
+        try {
+            const res = await fetch(`${MOCKAPI_BASE_URL}/users`, { signal: createTimeoutSignal(10000) });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const users = await res.json();
+            const found = users.find(u => u.email === recordEmail) || null;
+            return { ok: true, record: found };
+        } catch (err) {
+            console.error(`Errore lettura chat condivisa (tentativo ${i + 1}/${attempts})`, err);
+            if (i < attempts - 1) await new Promise(r => setTimeout(r, 800 * (i + 1)));
+        }
+    }
+    return { ok: false, record: null };
+}
+
+async function saveSharedChatRecord(chatId, chatData, existingRecordId) {
+    const payload = {
+        name: 'SocialChat Chat Data',
+        email: `socialchat_chat_${chatId}`,
+        phone: '',
+        password: '',
+        chatData: chatData
+    };
+    try {
+        if (existingRecordId) {
+            await fetch(`${MOCKAPI_BASE_URL}/users/${existingRecordId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                signal: createTimeoutSignal(10000)
+            });
+            return existingRecordId;
+        } else {
+            const res = await fetch(`${MOCKAPI_BASE_URL}/users`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                signal: createTimeoutSignal(10000)
+            });
+            const created = await res.json();
+            return created.id;
+        }
+    } catch (err) {
+        console.error("Errore salvataggio chat condivisa", err);
+        return existingRecordId || null;
+    }
+}
+
+// Recupera (o crea, se non esiste ancora) il record condiviso di una chat.
+async function getOrCreateSharedChat(chatId, defaults) {
+    const { ok, record } = await fetchSharedChatRecord(chatId);
+    if (record && record.chatData) {
+        return { recordId: record.id, chatData: record.chatData };
+    }
+    if (!ok) {
+        // Non sappiamo se la chat esiste già: MEGLIO fermarsi che creare un
+        // secondo record duplicato che spezzerebbe la conversazione in due.
+        throw new Error("Impossibile verificare la chat condivisa (rete non raggiungibile). Riprova.");
+    }
+    const chatData = Object.assign({
+        id: chatId,
+        isGroup: false,
+        participants: [],
+        messages: []
+    }, defaults);
+    const recordId = await saveSharedChatRecord(chatId, chatData, null);
+    return { recordId, chatData };
+}
+
+// Calcola quanti messaggi non letti (scritti da altri) ci sono in una chat locale.
+function countUnreadMessages(chat) {
+    if (!chat.messages) return 0;
+    const lastRead = chat.lastReadTimestamp || 0;
+    const myPhone = normalizePhone(mockData.user.phone);
+    return chat.messages.filter(m =>
+        m.authorPhone && normalizePhone(m.authorPhone) !== myPhone &&
+        m.dateTimestamp && m.dateTimestamp > lastRead
+    ).length;
+}
+
+// Ricontrolla periodicamente (polling) i record condivisi delle chat dell'utente,
+// per "ricevere" i messaggi scritti nel frattempo da altri account.
+async function syncChatsFromServer() {
+    let allRecords;
+    try {
+        const res = await fetch(`${MOCKAPI_BASE_URL}/users`);
+        if (!res.ok) return;
+        allRecords = await res.json();
+    } catch (err) {
+        console.error("Errore sync chat", err);
+        return;
+    }
+
+    const myPhone = normalizePhone(mockData.user.phone);
+    const chatRecordsByEmail = {};
+    allRecords.forEach(u => {
+        if (typeof u.email === 'string' && u.email.startsWith('socialchat_chat_') && u.chatData) {
+            chatRecordsByEmail[u.email] = u;
+        }
+    });
+
+    let changed = false;
+
+    // 1) Aggiorna i messaggi delle chat che ho già in lista.
+    if (mockData.chats) {
+        mockData.chats.forEach(chat => {
+            if (!chat.chatId) return; // chat "di sistema" (es. feedback), non condivisa
+            const record = chatRecordsByEmail[`socialchat_chat_${chat.chatId}`];
+            if (record && record.chatData && record.chatData.messages) {
+                const oldCount = (chat.messages || []).length;
+                const newMessages = record.chatData.messages;
+                if (newMessages.length !== oldCount) {
+                    chat.messages = newMessages;
+                    chat.lastMessage = newMessages.length > 0 ?
+                        (newMessages[newMessages.length - 1].text || '📎 Allegato') : chat.lastMessage;
+                    changed = true;
+                }
+                chat.unreadCount = countUnreadMessages(chat);
+            }
+        });
+    }
+
+    // 2) Scopre chat condivise create/avviate da un ALTRO account in cui sono
+    // partecipante ma che non ho ancora nella mia lista locale (es. Jane apre
+    // l'app dopo che Lilly le ha scritto per la prima volta).
+    if (!mockData.chats) mockData.chats = [];
+    Object.values(chatRecordsByEmail).forEach(record => {
+        const cd = record.chatData;
+        const participants = cd.participants || [];
+        const amIParticipant = participants.some(p => normalizePhone(p.phone) === myPhone);
+        if (!amIParticipant) return;
+        if (mockData.chats.find(c => c.id === cd.id)) return;
+
+        const others = participants.filter(p => normalizePhone(p.phone) !== myPhone);
+        const displayName = (others.map(o => o.name).join(', ') || 'Nuova chat').substring(0, 30);
+        const messages = cd.messages || [];
+
+        const newLocalChat = {
+            id: cd.id,
+            chatId: cd.id,
+            name: displayName,
+            avatar: `https://i.pravatar.cc/150?img=${Math.floor(Math.random() * 50)}`,
+            lastMessage: messages.length ? (messages[messages.length - 1].text || '📎 Allegato') : '',
+            timestamp: 'Ora',
+            isGroup: !!cd.isGroup,
+            participantCount: participants.length,
+            participantPhones: participants.map(p => normalizePhone(p.phone)),
+            messages: messages,
+            lastReadTimestamp: 0
+        };
+        newLocalChat.unreadCount = countUnreadMessages(newLocalChat);
+
+        mockData.chats.unshift(newLocalChat);
+        changed = true;
+    });
+
+    if (changed) {
+        // Come in WhatsApp: la chat con l'attività più recente sale in cima,
+        // così un nuovo messaggio si nota subito anche senza scorrere la lista.
+        // Inoltre, le chat con messaggi non letti hanno priorità assoluta.
+        mockData.chats.sort((a, b) => {
+            const unreadA = a.unreadCount || 0;
+            const unreadB = b.unreadCount || 0;
+            
+            // Priorità ai messaggi non letti
+            if (unreadA > 0 && unreadB === 0) return -1;
+            if (unreadB > 0 && unreadA === 0) return 1;
+            if (unreadA > 0 && unreadB > 0) return unreadB - unreadA;
+            
+            // Se entrambe hanno 0 non letti, ordina per timestamp
+            const lastA = (a.messages && a.messages.length) ? (a.messages[a.messages.length - 1].dateTimestamp || 0) : 0;
+            const lastB = (b.messages && b.messages.length) ? (b.messages[b.messages.length - 1].dateTimestamp || 0) : 0;
+            return lastB - lastA;
+        });
+        await saveDataLocalOnly();
+        renderChatsList();
+        if (activeChat) {
+            const refreshed = mockData.chats.find(c => c.id === activeChat.id);
+            if (refreshed) {
+                activeChat = refreshed;
+                renderActiveChatMessages(refreshed);
+            }
+        }
+    }
+}
+
+// Salva solo la cache locale, senza rimandare tutto mockData al record account su
+// MockAPI ad ogni polling: i messaggi vivono già nel record condiviso della chat.
+async function saveDataLocalOnly() {
+    try {
+        const cacheKey = currentAccountEmail ? `socialchat_data_${currentAccountEmail}` : 'socialchat_data';
+        localStorage.setItem(cacheKey, JSON.stringify(mockData));
+    } catch (err) {
+        console.error("Errore salvataggio localStorage:", err && err.message);
+    }
 }
 let activeChat = null;
 let activeCommunityChat = null;
@@ -270,6 +502,7 @@ function showMainApplication() {
 }
 
 function logout() {
+    stopChatPolling();
     localStorage.removeItem('socialchat_myprofile');
     localStorage.removeItem('socialchat_login_timestamp');
 
@@ -399,6 +632,28 @@ async function launchApp() {
     renderContactsGrid();
     renderPosts();
     renderCommunities();
+
+    startChatPolling();
+}
+
+let chatSyncIntervalId = null;
+
+// Controlla ogni pochi secondi se sono arrivati nuovi messaggi nelle chat
+// condivise (non c'è un vero backend con notifiche push, quindi si usa il
+// polling) e aggiorna lista chat, pallini non letti e conversazione aperta.
+function startChatPolling() {
+    if (chatSyncIntervalId) clearInterval(chatSyncIntervalId);
+    syncChatsFromServer();
+    chatSyncIntervalId = setInterval(() => {
+        syncChatsFromServer();
+    }, 7000);
+}
+
+function stopChatPolling() {
+    if (chatSyncIntervalId) {
+        clearInterval(chatSyncIntervalId);
+        chatSyncIntervalId = null;
+    }
 }
 
 function initMobileMenu() {
@@ -509,8 +764,22 @@ function initSidebarNavTabs() {
             if (btnId !== 'btn-nav-community') {
                 closeCommunityChat();
             }
+
+            // Cambiando sezione, chiudi la chat a schermo intero su mobile
+            // e riporta in vista la bottom nav.
+            if (btnId !== 'btn-nav-chats') {
+                const chatViewport = document.querySelector('.chat-viewport');
+                if (chatViewport) chatViewport.classList.remove('active');
+                document.body.classList.remove('mobile-chat-open');
+            }
         });
     });
+}
+
+// Nome mostrato per una chat: usa il nome personalizzato (rinomina locale
+// dell'account, non condivisa con l'altro partecipante) se presente.
+function getChatDisplayName(chat) {
+    return chat.customName || chat.name;
 }
 
 function renderChatsList() {
@@ -520,22 +789,27 @@ function renderChatsList() {
     const filterText = searchInput ? searchInput.value.toLowerCase().trim() : '';
 
     const filteredChats = mockData.chats.filter(chat => 
-        chat.name.toLowerCase().includes(filterText) || 
+        getChatDisplayName(chat).toLowerCase().includes(filterText) || 
         chat.lastMessage.toLowerCase().includes(filterText)
     );
 
     filteredChats.forEach(chat => {
         const item = document.createElement('div');
         item.className = `list-item ${activeChat && activeChat.id === chat.id ? 'active' : ''}`;
+        const unread = chat.unreadCount || 0;
+        const unreadBadge = unread > 0
+            ? `<span class="unread-badge">${unread > 99 ? '99+' : unread}</span>`
+            : '';
         item.innerHTML = `
-            <img src="${chat.avatar}" alt="${chat.name}" class="item-avatar">
+            <img src="${chat.avatar}" alt="${getChatDisplayName(chat)}" class="item-avatar">
             <div class="item-details">
                 <div class="item-header">
-                    <span class="item-title">${chat.name}</span>
+                    <span class="item-title">${getChatDisplayName(chat)}</span>
                     <span class="item-meta">${chat.timestamp}</span>
                 </div>
                 <p class="item-subtitle">${chat.lastMessage}</p>
             </div>
+            ${unreadBadge}
         `;
         item.onclick = () => openChatConversation(chat);
         listContainer.appendChild(item);
@@ -550,11 +824,13 @@ function openChatConversation(chat) {
     const viewportHeader = document.getElementById('chat-header');
     viewportHeader.classList.remove('hidden');
 
-    // Mobile: mostra chat viewport full screen
+    // Mobile: mostra chat viewport full screen e nascondi la bottom nav, che
+    // altrimenti (essendo anch'essa fixed) copre la casella di scrittura.
     const chatViewport = document.querySelector('.chat-viewport');
     if (chatViewport) {
         chatViewport.classList.add('active');
     }
+    document.body.classList.add('mobile-chat-open');
 
     let statusLabel = `<span style="font-size:12px; color:#34C759;">Online</span>`;
     if (chat.isGroup) {
@@ -570,10 +846,11 @@ function openChatConversation(chat) {
                 <span style="position:absolute; bottom:-2px; right:-2px; background:var(--primary-color); color:#fff; width:16px; height:16px; border-radius:50%; font-size:9px; display:flex; align-items:center; justify-content:center; border:2px solid #fff;">📷</span>
             </div>
             <input type="file" id="chat-avatar-input" accept="image/*" style="display:none;">
-            <div style="flex:1;">
-                <h4 style="font-weight:700; font-size:15px; margin:0;">${chat.name}</h4>
+            <div style="flex:1; min-width:0;">
+                <h4 style="font-weight:700; font-size:15px; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${getChatDisplayName(chat)}</h4>
                 ${statusLabel}
             </div>
+            <button id="btn-rename-chat" title="Rinomina questa chat (solo per te)" style="background:none; border:none; font-size:18px; cursor:pointer; padding:4px 8px; flex-shrink:0;">✏️</button>
         </div>
     `;
 
@@ -592,15 +869,35 @@ function openChatConversation(chat) {
         };
     }
 
+    const btnRenameChat = document.getElementById('btn-rename-chat');
+    if (btnRenameChat) {
+        btnRenameChat.onclick = () => {
+            const proposedName = prompt("Nuovo nome per questa chat (visibile solo a te):", getChatDisplayName(chat));
+            if (proposedName === null) return;
+            const trimmed = proposedName.trim();
+            if (!trimmed) return;
+            chat.customName = trimmed;
+            openChatConversation(chat);
+            renderChatsList();
+            saveDataLocalOnly();
+        };
+    }
+
+    // Segna la chat come letta: azzera il pallino blu dei messaggi non letti.
+    chat.lastReadTimestamp = Date.now();
+    chat.unreadCount = 0;
+    saveDataLocalOnly();
+
     document.getElementById('btn-back-chat').onclick = () => {
         activeChat = null;
         document.getElementById('message-input-area').classList.add('hidden');
         document.getElementById('chat-header').classList.add('hidden');
 
-        // Mobile: nascondi chat viewport
+        // Mobile: nascondi chat viewport e riporta la bottom nav
         if (chatViewport) {
             chatViewport.classList.remove('active');
         }
+        document.body.classList.remove('mobile-chat-open');
 
         document.getElementById('chat-messages').innerHTML = `
             <div class="chat-placeholder" id="chat-placeholder">
@@ -612,7 +909,15 @@ function openChatConversation(chat) {
         renderChatsList();
     };
 
+    renderActiveChatMessages(chat);
+}
+
+// Disegna i messaggi di una chat nel pannello centrale. Separata da
+// openChatConversation così il polling può aggiornare solo i messaggi
+// (nuovi arrivi) senza ridisegnare tutto l'header ogni pochi secondi.
+function renderActiveChatMessages(chat) {
     const messagesContainer = document.getElementById('chat-messages');
+    if (!messagesContainer) return;
     messagesContainer.innerHTML = '';
 
     if (!chat.messages) {
@@ -621,14 +926,18 @@ function openChatConversation(chat) {
         ];
     }
 
+    const myPhone = normalizePhone(mockData.user.phone);
+
     chat.messages.forEach(m => {
-        const isSelf = m.author === 'me' || m.author === mockData.user.name;
+        // Identità basata sul numero di telefono (affidabile anche tra account
+        // diversi); "me"/nome sono un fallback per i vecchi messaggi/di sistema.
+        const isSelf = m.authorPhone && normalizePhone(m.authorPhone) === myPhone;
         const bubble = document.createElement('div');
         bubble.className = `message-bubble ${isSelf ? 'message-sent' : 'message-received'}`;
 
         let senderHeader = '';
-        if (chat.isGroup) {
-            const displayAuthor = m.author === 'me' ? mockData.user.name : m.author;
+        if (chat.isGroup || !isSelf) {
+            const displayAuthor = isSelf ? mockData.user.name : (m.author || 'Sconosciuto');
             senderHeader = `<div style="font-size: 11px; font-weight: 700; margin-bottom: 2px; color: ${isSelf ? 'rgba(255,255,255,0.9)' : 'var(--primary-color)'};">${displayAuthor}</div>`;
         }
 
@@ -824,24 +1133,51 @@ if (btnConfirmCreateChat) {
 
         const groupName = selectedUsersForChat.map(u => u.name).join(', ');
         const isGroup = selectedUsersForChat.length > 1;
-        
-        const newChat = {
-            id: String(Date.now()),
-            name: groupName.substring(0, 30),
-            avatar: `https://i.pravatar.cc/150?img=${Math.floor(Math.random() * 50)}`,
-            lastMessage: "Chat avviata con successo.",
-            timestamp: "Ora",
-            isGroup: isGroup,
-            participantCount: selectedUsersForChat.length + 1,
-            messages: [
-                { author: "Sistema", text: "Chat avviata con successo.", timestamp: "Ora", files: [], dateTimestamp: Date.now() }
-            ]
-        };
 
-        mockData.chats.unshift(newChat);
-        await saveData();
+        // ID deterministico basato sui partecipanti: se l'altro account crea/apre
+        // la stessa conversazione, ottiene esattamente lo stesso ID e vede gli
+        // stessi messaggi (prima ogni account aveva una copia privata separata).
+        const allPhones = [mockData.user.phone, ...selectedUsersForChat.map(u => u.phone)];
+        const chatId = buildChatId(allPhones);
+
+        let existingChat = mockData.chats.find(c => c.id === chatId);
+        if (!existingChat) {
+            let chatData;
+            try {
+                ({ chatData } = await getOrCreateSharedChat(chatId, {
+                    isGroup: isGroup,
+                    participants: selectedUsersForChat.concat([{ name: mockData.user.name, phone: mockData.user.phone }]),
+                    messages: [
+                        { author: "Sistema", text: "Chat avviata con successo.", timestamp: "Ora", files: [], dateTimestamp: Date.now() }
+                    ]
+                }));
+            } catch (errore) {
+                console.error("Errore creazione chat/gruppo", errore);
+                alert("Non è stato possibile creare la chat: connessione al server non riuscita. Riprova.");
+                return;
+            }
+
+            existingChat = {
+                id: chatId,
+                chatId: chatId,
+                name: groupName.substring(0, 30),
+                avatar: `https://i.pravatar.cc/150?img=${Math.floor(Math.random() * 50)}`,
+                lastMessage: chatData.messages.length ? (chatData.messages[chatData.messages.length - 1].text || '📎 Allegato') : "Chat avviata con successo.",
+                timestamp: "Ora",
+                isGroup: isGroup,
+                participantCount: selectedUsersForChat.length + 1,
+                participantPhones: allPhones.map(normalizePhone),
+                messages: chatData.messages,
+                unreadCount: 0,
+                lastReadTimestamp: Date.now()
+            };
+
+            mockData.chats.unshift(existingChat);
+            await saveData();
+        }
+
         renderChatsList();
-        openChatConversation(newChat);
+        openChatConversation(existingChat);
         createChatModal.classList.add('hidden');
     };
 }
@@ -904,19 +1240,40 @@ async function renderContactsGrid() {
 
             document.getElementById(`chat-start-${idx}`).onclick = async (e) => {
                 e.stopPropagation();
-                
-                let existingChat = mockData.chats.find(c => c.name === readableName);
+
+                const chatId = buildChatId([mockData.user.phone, userPhone]);
+                let existingChat = mockData.chats.find(c => c.id === chatId);
                 if(!existingChat) {
-                    existingChat = { 
-                        id: String(Date.now()), 
-                        name: readableName, 
-                        avatar: avatarUrl, 
-                        lastMessage: "Chat appena iniziata con questo contatto.", 
-                        timestamp: "Ora", 
+                    let chatData;
+                    try {
+                        ({ chatData } = await getOrCreateSharedChat(chatId, {
+                            isGroup: false,
+                            participants: [
+                                { name: mockData.user.name, phone: mockData.user.phone },
+                                { name: readableName, phone: userPhone }
+                            ],
+                            messages: [
+                                { author: readableName, text: "Chat appena iniziata con questo contatto.", timestamp: "Ora", files: [], dateTimestamp: Date.now() }
+                            ]
+                        }));
+                    } catch (errore) {
+                        console.error("Errore avvio chat", errore);
+                        alert("Non è stato possibile aprire la chat: connessione al server non riuscita. Riprova.");
+                        return;
+                    }
+
+                    existingChat = {
+                        id: chatId,
+                        chatId: chatId,
+                        name: readableName,
+                        avatar: avatarUrl,
+                        lastMessage: chatData.messages.length ? (chatData.messages[chatData.messages.length - 1].text || '📎 Allegato') : "Chat appena iniziata con questo contatto.",
+                        timestamp: "Ora",
                         isGroup: false,
-                        messages: [
-                            { author: readableName, text: "Chat appena iniziata con questo contatto.", timestamp: "Ora", files: [], dateTimestamp: Date.now() }
-                        ]
+                        participantPhones: [normalizePhone(mockData.user.phone), normalizePhone(userPhone)],
+                        messages: chatData.messages,
+                        unreadCount: 0,
+                        lastReadTimestamp: Date.now()
                     };
                     mockData.chats.unshift(existingChat);
                     await saveData();
@@ -1032,7 +1389,8 @@ async function executeMessageTransmission() {
     const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     const newMessage = {
-        author: 'me',
+        author: mockData.user.name,
+        authorPhone: mockData.user.phone,
         text: msgText,
         timestamp: currentTime,
         files: resolvedFiles,
@@ -1041,11 +1399,68 @@ async function executeMessageTransmission() {
 
     if(activeChat) {
         if (!activeChat.messages) activeChat.messages = [];
-        activeChat.messages.push(newMessage);
-        activeChat.lastMessage = msgText ? msgText : `📎 File: ${resolvedFiles[0].name}`;
-        activeChat.timestamp = currentTime;
-        
-        await saveData();
+
+        if (activeChat.chatId) {
+            // Riprende prima i messaggi più recenti dal record condiviso (nel caso
+            // l'altro account abbia scritto nel frattempo), poi aggiunge il nuovo,
+            // così nessun messaggio dell'altra persona viene sovrascritto/perso.
+            const { ok, record } = await fetchSharedChatRecord(activeChat.chatId);
+
+            if (!ok) {
+                // Non siamo riusciti a leggere il record condiviso (rete/timeout):
+                // NON scriviamo alla cieca, altrimenti rischiamo di creare un
+                // secondo record duplicato per la stessa chat e perdere per
+                // sempre la sincronizzazione con l'altro account.
+                alert("Non è stato possibile inviare il messaggio: connessione al server non riuscita. Riprova tra qualche secondo.");
+                return;
+            }
+
+            const baseMessages = (record && record.chatData && record.chatData.messages)
+                ? record.chatData.messages
+                : activeChat.messages;
+            const mergedMessages = baseMessages.concat([newMessage]);
+
+            // Non azzerare mai i partecipanti: se il record non ha ancora
+            // chatData.participants, ricostruiscili dai dati che abbiamo già
+            // localmente, così l'altro account continua a "vedere" la chat.
+            const fallbackParticipants = (activeChat.participantPhones || []).map(phone =>
+                normalizePhone(phone) === normalizePhone(mockData.user.phone)
+                    ? { name: mockData.user.name, phone: mockData.user.phone }
+                    : { name: activeChat.name, phone: phone }
+            );
+            const participants = (record && record.chatData && record.chatData.participants && record.chatData.participants.length)
+                ? record.chatData.participants
+                : fallbackParticipants;
+
+            activeChat.messages = mergedMessages;
+            activeChat.lastMessage = msgText ? msgText : `📎 File: ${resolvedFiles[0].name}`;
+            activeChat.timestamp = currentTime;
+            activeChat.lastReadTimestamp = Date.now();
+            activeChat.unreadCount = 0;
+
+            const chatData = Object.assign({}, record && record.chatData, {
+                id: activeChat.chatId,
+                isGroup: !!activeChat.isGroup,
+                participants: participants,
+                messages: mergedMessages
+            });
+            await saveSharedChatRecord(activeChat.chatId, chatData, record ? record.id : null);
+            await saveDataLocalOnly();
+        } else {
+            // Chat "di sistema" (es. feedback), non condivisa tra account.
+            activeChat.messages.push(newMessage);
+            activeChat.lastMessage = msgText ? msgText : `📎 File: ${resolvedFiles[0].name}`;
+            activeChat.timestamp = currentTime;
+            await saveData();
+        }
+
+        // Porta in cima la chat appena usata, come in WhatsApp.
+        const idxJustUsed = mockData.chats.findIndex(c => c.id === activeChat.id);
+        if (idxJustUsed > 0) {
+            mockData.chats.splice(idxJustUsed, 1);
+            mockData.chats.unshift(activeChat);
+        }
+
         renderChatsList();
         openChatConversation(activeChat);
     }

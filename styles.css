@@ -811,6 +811,23 @@ body {
     display: none !important;
 }
 
+/* Pallino blu con il numero di messaggi non letti nella lista chat */
+.unread-badge {
+    flex-shrink: 0;
+    align-self: center;
+    background: var(--primary-color);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .post-comments-section {
     margin-top: 12px;
     border-top: 1px solid var(--light-gray);
@@ -973,7 +990,14 @@ body {
         left: 0;
         width: 100vw;
         height: 100vh;
-        z-index: 500;
+        z-index: 1500;
+    }
+
+    /* Bug: la bottom nav (fixed, z-index 1000) restava sopra alla chat aperta
+       a schermo intero e copriva la casella di scrittura messaggi.
+       La chat aperta ora sta sopra a tutto e la bottom nav viene nascosta. */
+    body.mobile-chat-open .mobile-bottom-nav {
+        display: none;
     }
 
     /* Griglie responsive */
@@ -1020,9 +1044,11 @@ body {
         max-width: 85%;
     }
 
-    /* Input area */
+    /* Input area - ensure it's visible on mobile */
     .message-input-area {
         padding: 12px 16px;
+        position: relative;
+        z-index: 1600;
     }
 
     /* Chat header */
