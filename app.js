@@ -173,6 +173,7 @@ async function syncChatsFromServer() {
         const res = await fetch(`${MOCKAPI_BASE_URL}/users`);
         if (!res.ok) return;
         allRecords = await res.json();
+        console.log("Tutti i record MockAPI recuperati:", allRecords.length);
     } catch (err) {
         console.error("Errore sync chat", err);
         return;
@@ -186,6 +187,7 @@ async function syncChatsFromServer() {
         }
     });
     console.log("Record chat trovati:", Object.keys(chatRecordsByEmail).length);
+    console.log("Chat records:", Object.keys(chatRecordsByEmail));
 
     let changed = false;
 
