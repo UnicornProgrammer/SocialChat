@@ -610,6 +610,36 @@ function initLoginHandler() {
     };
 }
 
+// Migra le chat vecchie (senza chatId) assegnando loro un chatId deterministico
+async function migrateLegacyChats() {
+    if (!mockData.chats) return;
+    
+    let migrated = 0;
+    for (const chat of mockData.chats) {
+        // Skip se ha già un chatId o è una chat di sistema
+        if (chat.chatId || chat.isSystem) continue;
+        
+        // Per chat 1-a-1, prova a dedurre il partecipante dal nome
+        if (!chat.isGroup && chat.participantPhones && chat.participantPhones.length > 0) {
+            // Ha già i participantPhones, usa quelli
+            chat.chatId = buildChatId([mockData.user.phone, ...chat.participantPhones.filter(p => normalizePhone(p) !== normalizePhone(mockData.user.phone))]);
+        } else if (!chat.isGroup) {
+            // Chat 1-a-1 senza participantPhones: usa l'ID esistente come chatId
+            chat.chatId = chat.id;
+        } else {
+            // Gruppo: usa l'ID esistente come chatId
+            chat.chatId = chat.id;
+        }
+        
+        migrated++;
+    }
+    
+    if (migrated > 0) {
+        console.log(`Migrate ${migrated} legacy chats to use chatId`);
+        await saveData();
+    }
+}
+
 async function launchApp() {
     await initializeFeedbackChat();
     updateProfileWidgetDOM();
@@ -641,6 +671,9 @@ async function launchApp() {
 
     // Mobile menu handlers
     initMobileMenu();
+
+    // Migra le chat vecchie senza chatId
+    await migrateLegacyChats();
 
     // Sincronizzazione immediata delle chat dal server per scoprire nuovi messaggi
     await syncChatsFromServer();
