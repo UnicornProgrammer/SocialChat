@@ -1504,14 +1504,17 @@ async function executeMessageTransmission() {
             // Non azzerare mai i partecipanti: se il record non ha ancora
             // chatData.participants, ricostruiscili dai dati che abbiamo già
             // localmente, così l'altro account continua a "vedere" la chat.
+            console.log("activeChat.participantPhones:", activeChat.participantPhones);
             const fallbackParticipants = (activeChat.participantPhones || []).map(phone =>
                 normalizePhone(phone) === normalizePhone(mockData.user.phone)
                     ? { name: mockData.user.name, phone: mockData.user.phone }
                     : { name: activeChat.name, phone: phone }
             );
+            console.log("fallbackParticipants:", fallbackParticipants);
             const participants = (record && record.chatData && record.chatData.participants && record.chatData.participants.length)
                 ? record.chatData.participants
                 : fallbackParticipants;
+            console.log("final participants:", participants);
 
             activeChat.messages = mergedMessages;
             activeChat.lastMessage = msgText ? msgText : `📎 File: ${resolvedFiles[0].name}`;
