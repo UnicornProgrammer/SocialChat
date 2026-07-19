@@ -1429,6 +1429,7 @@ async function executeMessageTransmission() {
 
     if(activeChat) {
         if (!activeChat.messages) activeChat.messages = [];
+        console.log("Invio messaggio - activeChat.chatId:", activeChat.chatId, "activeChat.name:", activeChat.name);
 
         if (activeChat.chatId) {
             // Riprende prima i messaggi più recenti dal record condiviso (nel caso
