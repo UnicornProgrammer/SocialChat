@@ -103,6 +103,7 @@ async function saveSharedChatRecord(chatId, chatData, existingRecordId) {
         chatData: chatData
     };
     console.log("Salvataggio chat condivisa:", chatId, "messaggi:", chatData.messages?.length);
+    console.log("Payload completo:", JSON.stringify(payload, null, 2));
     try {
         if (existingRecordId) {
             console.log("Aggiornamento record esistente:", existingRecordId);
@@ -113,6 +114,8 @@ async function saveSharedChatRecord(chatId, chatData, existingRecordId) {
                 signal: createTimeoutSignal(10000)
             });
             console.log("Risposta aggiornamento:", res.status);
+            const responseData = await res.json();
+            console.log("Risposta dati:", responseData);
             return existingRecordId;
         } else {
             console.log("Creazione nuovo record");
@@ -123,7 +126,7 @@ async function saveSharedChatRecord(chatId, chatData, existingRecordId) {
                 signal: createTimeoutSignal(10000)
             });
             const created = await res.json();
-            console.log("Nuovo record creato:", created.id);
+            console.log("Nuovo record creato:", created.id, created);
             return created.id;
         }
     } catch (err) {
