@@ -102,23 +102,16 @@ async function saveSharedChatRecord(chatId, chatData, existingRecordId) {
         password: '',
         chatData: chatData
     };
-    console.log("Salvataggio chat condivisa:", chatId, "messaggi:", chatData.messages?.length);
-    console.log("Payload completo:", JSON.stringify(payload, null, 2));
     try {
         if (existingRecordId) {
-            console.log("Aggiornamento record esistente:", existingRecordId);
             const res = await fetch(`${MOCKAPI_BASE_URL}/users/${existingRecordId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
                 signal: createTimeoutSignal(10000)
             });
-            console.log("Risposta aggiornamento:", res.status);
-            const responseData = await res.json();
-            console.log("Risposta dati:", responseData);
             return existingRecordId;
         } else {
-            console.log("Creazione nuovo record");
             const res = await fetch(`${MOCKAPI_BASE_URL}/users`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -126,7 +119,6 @@ async function saveSharedChatRecord(chatId, chatData, existingRecordId) {
                 signal: createTimeoutSignal(10000)
             });
             const created = await res.json();
-            console.log("Nuovo record creato:", created.id, created);
             return created.id;
         }
     } catch (err) {
@@ -170,13 +162,11 @@ function countUnreadMessages(chat) {
 // Ricontrolla periodicamente (polling) i record condivisi delle chat dell'utente,
 // per "ricevere" i messaggi scritti nel frattempo da altri account.
 async function syncChatsFromServer() {
-    console.log("Sincronizzazione chat in corso per:", mockData.user.phone);
     let allRecords;
     try {
         const res = await fetch(`${MOCKAPI_BASE_URL}/users`);
         if (!res.ok) return;
         allRecords = await res.json();
-        console.log("Tutti i record MockAPI recuperati:", allRecords.length);
     } catch (err) {
         console.error("Errore sync chat", err);
         return;
@@ -185,13 +175,10 @@ async function syncChatsFromServer() {
     const myPhone = normalizePhone(mockData.user.phone);
     const chatRecordsByEmail = {};
     allRecords.forEach(u => {
-        console.log("Processing record:", u.email, "has chatData:", !!u.chatData);
         if (typeof u.email === 'string' && u.email.startsWith('socialchat_chat_') && u.chatData) {
             chatRecordsByEmail[u.email] = u;
         }
     });
-    console.log("Record chat trovati:", Object.keys(chatRecordsByEmail).length);
-    console.log("Chat records:", Object.keys(chatRecordsByEmail));
 
     let changed = false;
 
@@ -1429,7 +1416,7 @@ async function executeMessageTransmission() {
 
     if(activeChat) {
         if (!activeChat.messages) activeChat.messages = [];
-        console.log("Invio messaggio - activeChat.chatId:", activeChat.chatId, "activeChat.name:", activeChat.name);
+        console.log("Invio messaggio - chatId:", activeChat.chatId, "chat name:", activeChat.name);
 
         if (activeChat.chatId) {
             // Riprende prima i messaggi più recenti dal record condiviso (nel caso
