@@ -216,11 +216,16 @@ async function syncChatsFromServer() {
         const displayName = (others.map(o => o.name).join(', ') || 'Nuova chat').substring(0, 30);
         const messages = cd.messages || [];
 
+        // Per chat 1-a-1, usa un avatar deterministico basato sul nome dell'altra persona
+        // così entrambi vedono la stessa foto per la stessa persona
+        const avatarSeed = others.length === 1 ? others[0].name : Math.floor(Math.random() * 50);
+        const avatarUrl = `https://i.pravatar.cc/150?img=${typeof avatarSeed === 'string' ? (avatarSeed.charCodeAt(0) % 70) : avatarSeed}`;
+
         const newLocalChat = {
             id: cd.id,
             chatId: cd.id,
             name: displayName,
-            avatar: `https://i.pravatar.cc/150?img=${Math.floor(Math.random() * 50)}`,
+            avatar: avatarUrl,
             lastMessage: messages.length ? (messages[messages.length - 1].text || '📎 Allegato') : '',
             timestamp: 'Ora',
             isGroup: !!cd.isGroup,
@@ -627,6 +632,9 @@ async function launchApp() {
 
     // Mobile menu handlers
     initMobileMenu();
+
+    // Sincronizzazione immediata delle chat dal server per scoprire nuovi messaggi
+    await syncChatsFromServer();
 
     renderChatsList();
     renderContactsGrid();
