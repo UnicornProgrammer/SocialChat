@@ -656,9 +656,31 @@ async function migrateLegacyChats() {
         } else if (!chat.isGroup) {
             // Chat 1-a-1 senza participantPhones: usa l'ID esistente come chatId
             chat.chatId = chat.id;
+            
+            // Deduce i partecipanti dai messaggi esistenti
+            if (chat.messages && chat.messages.length > 0) {
+                const uniquePhones = new Set();
+                chat.messages.forEach(m => {
+                    if (m.authorPhone) uniquePhones.add(normalizePhone(m.authorPhone));
+                });
+                // Aggiungi sempre il telefono dell'utente corrente
+                uniquePhones.add(normalizePhone(mockData.user.phone));
+                chat.participantPhones = Array.from(uniquePhones);
+            }
         } else {
             // Gruppo: usa l'ID esistente come chatId
             chat.chatId = chat.id;
+            
+            // Deduce i partecipanti dai messaggi esistenti
+            if (chat.messages && chat.messages.length > 0) {
+                const uniquePhones = new Set();
+                chat.messages.forEach(m => {
+                    if (m.authorPhone) uniquePhones.add(normalizePhone(m.authorPhone));
+                });
+                // Aggiungi sempre il telefono dell'utente corrente
+                uniquePhones.add(normalizePhone(mockData.user.phone));
+                chat.participantPhones = Array.from(uniquePhones);
+            }
         }
         
         migrated++;
