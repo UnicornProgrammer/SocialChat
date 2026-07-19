@@ -245,7 +245,9 @@ async function syncChatsFromServer() {
     Object.values(chatRecordsByEmail).forEach(record => {
         const cd = record.chatData;
         const participants = cd.participants || [];
+        console.log("Checking chat record - chatId:", cd.id, "participants:", participants.map(p => p.name + "(" + p.phone + ")").join(", "));
         const amIParticipant = participants.some(p => normalizePhone(p.phone) === myPhone);
+        console.log("amIParticipant:", amIParticipant, "myPhone:", myPhone);
         if (!amIParticipant) return;
         if (mockData.chats.find(c => c.id === cd.id)) return;
 
