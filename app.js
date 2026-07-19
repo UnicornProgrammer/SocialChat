@@ -1553,9 +1553,13 @@ async function executeMessageTransmission() {
                     : { name: activeChat.name, phone: phone }
             );
             console.log("fallbackParticipants:", fallbackParticipants);
-            const participants = (record && record.chatData && record.chatData.participants && record.chatData.participants.length)
+            // Preferisci i partecipanti locali se sono più completi di quelli nel record
+            const recordParticipants = (record && record.chatData && record.chatData.participants && record.chatData.participants.length)
                 ? record.chatData.participants
-                : fallbackParticipants;
+                : [];
+            const participants = fallbackParticipants.length > recordParticipants.length
+                ? fallbackParticipants
+                : recordParticipants;
             console.log("final participants:", participants);
 
             activeChat.messages = mergedMessages;
