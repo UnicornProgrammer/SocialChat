@@ -102,16 +102,20 @@ async function saveSharedChatRecord(chatId, chatData, existingRecordId) {
         password: '',
         chatData: chatData
     };
+    console.log("Salvataggio chat condivisa:", chatId, "messaggi:", chatData.messages?.length);
     try {
         if (existingRecordId) {
-            await fetch(`${MOCKAPI_BASE_URL}/users/${existingRecordId}`, {
+            console.log("Aggiornamento record esistente:", existingRecordId);
+            const res = await fetch(`${MOCKAPI_BASE_URL}/users/${existingRecordId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
                 signal: createTimeoutSignal(10000)
             });
+            console.log("Risposta aggiornamento:", res.status);
             return existingRecordId;
         } else {
+            console.log("Creazione nuovo record");
             const res = await fetch(`${MOCKAPI_BASE_URL}/users`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -119,6 +123,7 @@ async function saveSharedChatRecord(chatId, chatData, existingRecordId) {
                 signal: createTimeoutSignal(10000)
             });
             const created = await res.json();
+            console.log("Nuovo record creato:", created.id);
             return created.id;
         }
     } catch (err) {
@@ -162,6 +167,7 @@ function countUnreadMessages(chat) {
 // Ricontrolla periodicamente (polling) i record condivisi delle chat dell'utente,
 // per "ricevere" i messaggi scritti nel frattempo da altri account.
 async function syncChatsFromServer() {
+    console.log("Sincronizzazione chat in corso per:", mockData.user.phone);
     let allRecords;
     try {
         const res = await fetch(`${MOCKAPI_BASE_URL}/users`);
@@ -179,6 +185,7 @@ async function syncChatsFromServer() {
             chatRecordsByEmail[u.email] = u;
         }
     });
+    console.log("Record chat trovati:", Object.keys(chatRecordsByEmail).length);
 
     let changed = false;
 
