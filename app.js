@@ -190,7 +190,16 @@ async function syncChatsFromServer() {
             if (record && record.chatData && record.chatData.messages) {
                 const oldCount = (chat.messages || []).length;
                 const newMessages = record.chatData.messages;
-                if (newMessages.length !== oldCount) {
+                
+                // Controlla sia la lunghezza che il timestamp dell'ultimo messaggio
+                const oldLastTimestamp = (chat.messages && chat.messages.length) 
+                    ? (chat.messages[chat.messages.length - 1].dateTimestamp || 0) 
+                    : 0;
+                const newLastTimestamp = (newMessages && newMessages.length) 
+                    ? (newMessages[newMessages.length - 1].dateTimestamp || 0) 
+                    : 0;
+                
+                if (newMessages.length !== oldCount || newLastTimestamp > oldLastTimestamp) {
                     chat.messages = newMessages;
                     chat.lastMessage = newMessages.length > 0 ?
                         (newMessages[newMessages.length - 1].text || '📎 Allegato') : chat.lastMessage;
