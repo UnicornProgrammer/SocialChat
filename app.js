@@ -77,7 +77,24 @@ function buildChatId(phonesArray) {
 // il chiamante creava un SECONDO record duplicato per la stessa chat. Da quel
 // momento i due account leggevano record diversi e i messaggi sembravano
 // sparire per sempre: è il bug più probabile dietro "il messaggio non arriva".
-async function fetchSharedChatRecord(chatId, attempts = 3) {
+async function fetchSharedChatRecord(chatId, existingRecordId = null, attempts = 3) {
+    // Se abbiamo l'ID del record salvato localmente, usiamo il lookup diretto per ID
+    if (existingRecordId) {
+        for (let i = 0; i < attempts; i++) {
+            try {
+                const res = await fetch(`${MOCKAPI_BASE_URL}/users/${existingRecordId}`, { signal: createTimeoutSignal(10000) });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const record = await res.json();
+                return { ok: true, record: record };
+            } catch (err) {
+                console.error(`Errore lettura chat condivisa per ID (tentativo ${i + 1}/${attempts})`, err);
+                if (i < attempts - 1) await new Promise(r => setTimeout(r, 800 * (i + 1)));
+            }
+        }
+        return { ok: false, record: null };
+    }
+    
+    // Fallback: cerca per email
     const recordEmail = `socialchat_chat_${chatId}`;
     for (let i = 0; i < attempts; i++) {
         try {
@@ -87,7 +104,7 @@ async function fetchSharedChatRecord(chatId, attempts = 3) {
             const found = users.find(u => u.email === recordEmail) || null;
             return { ok: true, record: found };
         } catch (err) {
-            console.error(`Errore lettura chat condivisa (tentativo ${i + 1}/${attempts})`, err);
+            console.error(`Errore lettura chat condivisa per email (tentativo ${i + 1}/${attempts})`, err);
             if (i < attempts - 1) await new Promise(r => setTimeout(r, 800 * (i + 1)));
         }
     }
@@ -1463,7 +1480,7 @@ async function executeMessageTransmission() {
             // Riprende prima i messaggi più recenti dal record condiviso (nel caso
             // l'altro account abbia scritto nel frattempo), poi aggiunge il nuovo,
             // così nessun messaggio dell'altra persona viene sovrascritto/perso.
-            const { ok, record } = await fetchSharedChatRecord(activeChat.chatId);
+            const { ok, record } = await fetchSharedChatRecord(activeChat.chatId, activeChat.mockApiRecordId);
 
             if (!ok) {
                 // Non siamo riusciti a leggere il record condiviso (rete/timeout):
@@ -1503,7 +1520,11 @@ async function executeMessageTransmission() {
                 participants: participants,
                 messages: mergedMessages
             });
-            await saveSharedChatRecord(activeChat.chatId, chatData, record ? record.id : null);
+            const savedRecordId = await saveSharedChatRecord(activeChat.chatId, chatData, record ? record.id : null);
+            // Salva l'ID del record MockAPI nella chat locale per usarlo per i prossimi aggiornamenti
+            if (savedRecordId) {
+                activeChat.mockApiRecordId = savedRecordId;
+            }
             await saveDataLocalOnly();
         } else {
             // Chat "di sistema" (es. feedback), non condivisa tra account.
