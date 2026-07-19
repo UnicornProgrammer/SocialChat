@@ -182,6 +182,7 @@ async function syncChatsFromServer() {
     const myPhone = normalizePhone(mockData.user.phone);
     const chatRecordsByEmail = {};
     allRecords.forEach(u => {
+        console.log("Processing record:", u.email, "has chatData:", !!u.chatData);
         if (typeof u.email === 'string' && u.email.startsWith('socialchat_chat_') && u.chatData) {
             chatRecordsByEmail[u.email] = u;
         }
