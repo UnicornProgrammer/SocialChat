@@ -337,7 +337,54 @@ let selectedUsersForChat = [];
 let postAttachedFile = null;
 let communityAttachedAvatar = "https://i.pravatar.cc/150?img=12";
 
+function updateAppViewportMetrics() {
+    const viewport = window.visualViewport;
+    const viewportHeight = viewport ? viewport.height : window.innerHeight;
+    const viewportOffsetTop = viewport ? viewport.offsetTop : 0;
+
+    document.documentElement.style.setProperty(
+        '--app-viewport-height',
+        `${Math.max(320, Math.round(viewportHeight))}px`
+    );
+    document.documentElement.style.setProperty(
+        '--app-viewport-offset-top',
+        `${Math.max(0, Math.round(viewportOffsetTop))}px`
+    );
+}
+
+function setMobileChatOpen(isOpen) {
+    const chatViewport = document.querySelector('.chat-viewport');
+    const bottomNav = document.getElementById('mobile-bottom-nav');
+
+    if (chatViewport) {
+        chatViewport.classList.toggle('active', isOpen);
+    }
+    document.body.classList.toggle('mobile-chat-open', isOpen);
+
+    // Non affidarsi soltanto alla regola CSS: .hidden usa !important e rende
+    // impossibile alla bottom navigation coprire la barra di composizione.
+    if (bottomNav) {
+        bottomNav.classList.toggle('hidden', isOpen);
+        bottomNav.classList.toggle('chat-is-open', isOpen);
+    }
+
+    if (isOpen) {
+        updateAppViewportMetrics();
+        requestAnimationFrame(() => {
+            const messages = document.getElementById('chat-messages');
+            if (messages) messages.scrollTop = messages.scrollHeight;
+        });
+    }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+    updateAppViewportMetrics();
+    window.addEventListener('resize', updateAppViewportMetrics, { passive: true });
+    window.addEventListener('orientationchange', updateAppViewportMetrics, { passive: true });
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', updateAppViewportMetrics, { passive: true });
+        window.visualViewport.addEventListener('scroll', updateAppViewportMetrics, { passive: true });
+    }
     checkSessionAndInit();
 });
 
@@ -556,6 +603,7 @@ function showMainApplication() {
 
 function logout() {
     stopChatPolling();
+    setMobileChatOpen(false);
     localStorage.removeItem('socialchat_myprofile');
     localStorage.removeItem('socialchat_login_timestamp');
 
@@ -899,9 +947,7 @@ function initSidebarNavTabs() {
             // Cambiando sezione, chiudi la chat a schermo intero su mobile
             // e riporta in vista la bottom nav.
             if (btnId !== 'btn-nav-chats') {
-                const chatViewport = document.querySelector('.chat-viewport');
-                if (chatViewport) chatViewport.classList.remove('active');
-                document.body.classList.remove('mobile-chat-open');
+                setMobileChatOpen(false);
             }
         });
     });
@@ -958,10 +1004,7 @@ function openChatConversation(chat) {
     // Mobile: mostra chat viewport full screen e nascondi la bottom nav, che
     // altrimenti (essendo anch'essa fixed) copre la casella di scrittura.
     const chatViewport = document.querySelector('.chat-viewport');
-    if (chatViewport) {
-        chatViewport.classList.add('active');
-    }
-    document.body.classList.add('mobile-chat-open');
+    setMobileChatOpen(true);
 
     let statusLabel = `<span style="font-size:12px; color:#34C759;">Online</span>`;
     if (chat.isGroup) {
@@ -1025,10 +1068,7 @@ function openChatConversation(chat) {
         document.getElementById('chat-header').classList.add('hidden');
 
         // Mobile: nascondi chat viewport e riporta la bottom nav
-        if (chatViewport) {
-            chatViewport.classList.remove('active');
-        }
-        document.body.classList.remove('mobile-chat-open');
+        setMobileChatOpen(false);
 
         document.getElementById('chat-messages').innerHTML = `
             <div class="chat-placeholder" id="chat-placeholder">
