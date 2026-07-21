@@ -7,10 +7,10 @@
   "theme_color": "#0061C8",
   "icons": [
     {
-      "src": "icona_android.png",
+      "src": "icona_universale.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ]
 }
