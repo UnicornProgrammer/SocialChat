@@ -1,0 +1,16 @@
+{
+  "name": "SocialChat",
+  "short_name": "SocialChat",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#D2E5FA",
+  "theme_color": "#0061C8",
+  "icons": [
+    {
+      "src": "icona_android.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
